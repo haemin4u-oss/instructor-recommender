@@ -92,20 +92,27 @@ DB = get_db()
 # ─────────────────────────────────────────────
 # 사이드바
 # ─────────────────────────────────────────────
+def _secret(key, default=""):
+    """Streamlit Cloud secrets → .env 순서로 읽기"""
+    try:
+        return st.secrets[key]
+    except Exception:
+        return os.getenv(key, default)
+
 with st.sidebar:
     st.header("⚙️ API 키 설정")
-    claude_key  = st.text_input("Claude API Key",  type="password", value=os.getenv("ANTHROPIC_API_KEY",""))
-    tavily_key  = st.text_input("Tavily API Key",  type="password", value=os.getenv("TAVILY_API_KEY",""))
-    youtube_key = st.text_input("YouTube API Key", type="password", value=os.getenv("YOUTUBE_API_KEY",""))
+    claude_key  = st.text_input("Claude API Key",  type="password", value=_secret("ANTHROPIC_API_KEY"))
+    tavily_key  = st.text_input("Tavily API Key",  type="password", value=_secret("TAVILY_API_KEY"))
+    youtube_key = st.text_input("YouTube API Key", type="password", value=_secret("YOUTUBE_API_KEY"))
     st.divider()
     st.subheader("Notion 연동")
-    use_notion   = st.toggle("Notion 저장 사용", value=bool(os.getenv("NOTION_TOKEN","")))
+    use_notion   = st.toggle("Notion 저장 사용", value=bool(_secret("NOTION_TOKEN")))
     notion_token, notion_db_id = "", ""
     if use_notion:
-        notion_token = st.text_input("Integration Token", type="password", value=os.getenv("NOTION_TOKEN",""))
-        notion_db_id = st.text_input("강사 검증 DB ID",  value=os.getenv("NOTION_DB_ID","5ade06bd-27f0-4434-b8c2-0deeb54e3d35"))
+        notion_token = st.text_input("Integration Token", type="password", value=_secret("NOTION_TOKEN"))
+        notion_db_id = st.text_input("강사 검증 DB ID",  value=_secret("NOTION_DB_ID","5ade06bd-27f0-4434-b8c2-0deeb54e3d35"))
     st.divider()
-    st.caption("💡 .env 파일에 저장하면 자동 로드")
+    st.caption("💡 Streamlit Secrets 또는 .env 파일로 자동 로드")
 
 def api_ok():
     return bool(claude_key and tavily_key and youtube_key)
