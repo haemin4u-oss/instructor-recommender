@@ -121,7 +121,8 @@ def api_ok():
 # API 함수
 # ─────────────────────────────────────────────
 def claude_client():
-    return anthropic.Anthropic(api_key=claude_key)
+    key = (claude_key or _secret("ANTHROPIC_API_KEY", "")).strip()
+    return anthropic.Anthropic(api_key=key)
 
 def get_candidates(topic, levels, audience, background="", exclude=None, count=10, extra_direction=""):
     exclude = exclude or []
@@ -150,8 +151,9 @@ def youtube_top3(name, topic):
     results, seen = [], set()
     for q in queries:
         try:
+            yt_key = (youtube_key or _secret("YOUTUBE_API_KEY","")).strip()
             r = requests.get("https://www.googleapis.com/youtube/v3/search",
-                params={"key":youtube_key,"q":q,"type":"video","maxResults":5,
+                params={"key":yt_key,"q":q,"type":"video","maxResults":5,
                         "part":"snippet","relevanceLanguage":"ko"}, timeout=10)
             if r.status_code == 200:
                 for item in r.json().get("items",[]):
@@ -173,8 +175,9 @@ def youtube_top3(name, topic):
 
 def tavily_ref(keyword):
     try:
+        tv_key = (tavily_key or _secret("TAVILY_API_KEY","")).strip()
         r = requests.post("https://api.tavily.com/search",
-            json={"api_key":tavily_key,"query":f"{keyword} 강연 이력 경력","max_results":5},
+            json={"api_key":tv_key,"query":f"{keyword} 강연 이력 경력","max_results":5},
             timeout=10)
         if r.status_code == 200:
             items = r.json().get("results",[])
