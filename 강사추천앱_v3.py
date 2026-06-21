@@ -113,6 +113,13 @@ with st.sidebar:
         notion_db_id = st.text_input("강사 검증 DB ID",  value=_secret("NOTION_DB_ID","5ade06bd-27f0-4434-b8c2-0deeb54e3d35"))
     st.divider()
     st.caption("💡 Streamlit Secrets 또는 .env 파일로 자동 로드")
+    # 진단용
+    if st.button("🔍 키 상태 확인"):
+        k = _secret("ANTHROPIC_API_KEY","").strip()
+        if k:
+            st.success(f"Claude 키 로드됨: {k[:8]}...{k[-4:]} (총 {len(k)}자)")
+        else:
+            st.error("Claude 키 없음")
 
 def api_ok():
     return bool(claude_key and tavily_key and youtube_key)
