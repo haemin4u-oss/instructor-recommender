@@ -90,46 +90,32 @@ def get_db():
 DB = get_db()
 
 # ─────────────────────────────────────────────
-# 사이드바
+# API 키 (Streamlit Secrets → .env 순서)
 # ─────────────────────────────────────────────
 def _secret(key, default=""):
-    """Streamlit Cloud secrets → .env 순서로 읽기"""
     try:
         return st.secrets[key]
     except Exception:
         return os.getenv(key, default)
 
-with st.sidebar:
-    st.header("⚙️ API 키 설정")
-    claude_key  = st.text_input("Claude API Key",  type="password", value=_secret("ANTHROPIC_API_KEY"))
-    tavily_key  = st.text_input("Tavily API Key",  type="password", value=_secret("TAVILY_API_KEY"))
-    youtube_key = st.text_input("YouTube API Key", type="password", value=_secret("YOUTUBE_API_KEY"))
-    st.divider()
-    st.subheader("Notion 연동")
-    use_notion   = st.toggle("Notion 저장 사용", value=bool(_secret("NOTION_TOKEN")))
-    notion_token, notion_db_id = "", ""
-    if use_notion:
-        notion_token = st.text_input("Integration Token", type="password", value=_secret("NOTION_TOKEN"))
-        notion_db_id = st.text_input("강사 검증 DB ID",  value=_secret("NOTION_DB_ID","5ade06bd-27f0-4434-b8c2-0deeb54e3d35"))
-    st.divider()
-    st.caption("💡 Streamlit Secrets 또는 .env 파일로 자동 로드")
-    # 진단용
-    if st.button("🔍 키 상태 확인"):
-        k = _secret("ANTHROPIC_API_KEY","").strip()
-        if k:
-            st.success(f"Claude 키 로드됨: {k[:8]}...{k[-4:]} (총 {len(k)}자)")
-        else:
-            st.error("Claude 키 없음")
+CLAUDE_KEY   = _secret("ANTHROPIC_API_KEY").strip()
+TAVILY_KEY   = _secret("TAVILY_API_KEY").strip()
+YOUTUBE_KEY  = _secret("YOUTUBE_API_KEY").strip()
+NOTION_TOKEN_VAL = _secret("NOTION_TOKEN").strip()
+NOTION_DB_VAL    = _secret("NOTION_DB_ID", "5ade06bd-27f0-4434-b8c2-0deeb54e3d35").strip()
+
+use_notion   = bool(NOTION_TOKEN_VAL)
+notion_token = NOTION_TOKEN_VAL
+notion_db_id = NOTION_DB_VAL
 
 def api_ok():
-    return bool(claude_key and tavily_key and youtube_key)
+    return bool(CLAUDE_KEY and TAVILY_KEY and YOUTUBE_KEY)
 
 # ─────────────────────────────────────────────
 # API 함수
 # ─────────────────────────────────────────────
 def claude_client():
-    key = (claude_key or _secret("ANTHROPIC_API_KEY", "")).strip()
-    return anthropic.Anthropic(api_key=key)
+    return anthropic.Anthropic(api_key=CLAUDE_KEY)
 
 def get_candidates(topic, levels, audience, background="", exclude=None, count=10, extra_direction=""):
     exclude = exclude or []
@@ -142,7 +128,7 @@ def get_candidates(topic, levels, audience, background="", exclude=None, count=1
 
 실존하는 강사/강연자 {count}명을 추천하세요.
 JSON 배열로만 응답 (다른 텍스트 없이):
-[{{"name":"강사명","level":"분류","specialty":"전문분야","affiliation":"소속/직함","reason":"추천이유(2문장)","keyword":"검색키워드"}}]"""
+[{{"name":"강사명","level":"분류","specialty":"전문분야","affiliation":"소속/직함","reason":"추천이유(2문장)","keyword":"검색키워드","fee_range":"예상강연료(예:300~500만원)"}}]"""
     try:
         r = claude_client().messages.create(
             model="claude-opus-4-5", max_tokens=3000,
@@ -158,9 +144,8 @@ def youtube_top3(name, topic):
     results, seen = [], set()
     for q in queries:
         try:
-            yt_key = (youtube_key or _secret("YOUTUBE_API_KEY","")).strip()
             r = requests.get("https://www.googleapis.com/youtube/v3/search",
-                params={"key":yt_key,"q":q,"type":"video","maxResults":5,
+                params={"key":YOUTUBE_KEY,"q":q,"type":"video","maxResults":5,
                         "part":"snippet","relevanceLanguage":"ko"}, timeout=10)
             if r.status_code == 200:
                 for item in r.json().get("items",[]):
@@ -182,15 +167,56 @@ def youtube_top3(name, topic):
 
 def tavily_ref(keyword):
     try:
-        tv_key = (tavily_key or _secret("TAVILY_API_KEY","")).strip()
         r = requests.post("https://api.tavily.com/search",
-            json={"api_key":tv_key,"query":f"{keyword} 강연 이력 경력","max_results":5},
+            json={"api_key":TAVILY_KEY,"query":f"{keyword} 강연 이력 경력","max_results":5},
             timeout=10)
         if r.status_code == 200:
             items = r.json().get("results",[])
             return " | ".join(x.get("content","")[:150] for x in items[:3])
     except: pass
     return "검색 결과 없음"
+
+def tavily_fee(name):
+    """강연료/섭외비 웹 검색"""
+    try:
+        r = requests.post("https://api.tavily.com/search",
+            json={"api_key":TAVILY_KEY,
+                  "query":f"{name} 강연료 섭외비 강사비 출연료",
+                  "max_results":5},
+            timeout=10)
+        if r.status_code == 200:
+            items = r.json().get("results",[])
+            return " | ".join(x.get("content","")[:200] for x in items[:3])
+    except: pass
+    return ""
+
+def estimate_fee(name, specialty, affiliation, level, ref_info, fee_web):
+    """Claude로 예상 강연료 추정"""
+    prompt = f"""강사 정보를 바탕으로 1회 강연(2시간 기준) 예상 강연료를 추정하세요.
+
+강사: {name}
+소속/직함: {affiliation}
+전문분야: {specialty}
+강사 분류: {level}
+
+[웹 레퍼런스 - 이력/경력]
+{ref_info[:300]}
+
+[웹 검색 - 강연료 관련]
+{fee_web[:300] if fee_web else "검색 결과 없음"}
+
+한국 기업 교육 시장 기준으로 현실적인 범위를 추정하세요.
+JSON으로만 응답:
+{{"fee_range":"예: 300~500만원","fee_basis":"추정 근거 (1문장)"}}"""
+    try:
+        r = claude_client().messages.create(
+            model="claude-opus-4-5", max_tokens=200,
+            messages=[{"role":"user","content":prompt}])
+        m = re.search(r'\{.*\}', r.content[0].text, re.DOTALL)
+        if m:
+            return json.loads(m.group())
+    except: pass
+    return {"fee_range":"추정 불가", "fee_basis":""}
 
 def verify(name, specialty, affiliation, topic, levels, audience, ref_info, yt_list):
     """
@@ -230,7 +256,7 @@ JSON으로만:
 
 def notion_save(name, specialty, affiliation, level, topic, audience,
                 yt_score, ref_score, fit_score, target_score, total,
-                verdict, ref_summary, verdict_reason, yt_list):
+                verdict, ref_summary, verdict_reason, yt_list, fee_range=""):
     yt_text = "\n".join(x["url"] for x in yt_list)
     # 교육대상 선택값을 Notion SELECT 옵션값에 맞게 변환
     audience_map = {
@@ -276,6 +302,7 @@ def notion_save(name, specialty, affiliation, level, topic, audience,
                 "유튜브URL":   {"rich_text": [{"text":{"content":yt_text[:2000]}}]},
                 "레퍼런스요약":{"rich_text": [{"text":{"content":ref_summary[:2000]}}]},
                 "판정근거":    {"rich_text": [{"text":{"content":verdict_reason[:500]}}]},
+                **({"예상단가": {"rich_text": [{"text":{"content":fee_range}}]}} if fee_range else {}),
             }}, timeout=10)
         return r.status_code == 200
     except: return False
@@ -364,7 +391,7 @@ def step1():
         if not levels:
             st.warning("강사 유형을 하나 이상 선택하세요."); return
         if not api_ok():
-            st.error("사이드바에서 API 키를 입력하세요."); return
+            st.error("API 키가 설정되지 않았습니다. Streamlit Secrets를 확인하세요."); return
 
         st.session_state.update(topic=topic, background=background,
                                 levels=levels, audience=audience,
@@ -404,6 +431,9 @@ def step2():
             st.checkbox("선택", key=key, label_visibility="collapsed")
         with col_name:
             st.markdown(f"**{c['name']}**  \n`{c.get('level','')}`")
+            fee = c.get("fee_range","")
+            if fee:
+                st.caption(f"💰 {fee}")
         with col_info:
             st.caption(f"{c.get('affiliation','')}  |  {c.get('specialty','')}")
             st.caption(c.get('reason',''))
@@ -473,6 +503,14 @@ def step3():
         yts   = youtube_top3(name, topic)
         score = verify(name, c.get("specialty",""), c.get("affiliation",""),
                        topic, levels, audience, ref, yts)
+        # 예상단가: 웹 서칭 + Claude 추정
+        status.info(f"검증 중 ({i+1}/{total_n}): **{name}** — 강연료 조사 중...")
+        fee_web  = tavily_fee(name)
+        fee_data = estimate_fee(name, c.get("specialty",""), c.get("affiliation",""),
+                                c.get("level",""), ref, fee_web)
+        fee_range = fee_data.get("fee_range", c.get("fee_range","추정 불가"))
+        fee_basis = fee_data.get("fee_basis","")
+
         DB.execute("""INSERT INTO verifications
             (topic,levels,audience,name,specialty,affiliation,
              yt_score,ref_score,fit_score,target_score,total_score,verdict,
@@ -487,7 +525,8 @@ def step3():
              score.get("ref_summary",""), score.get("verdict_reason",""),
              datetime.now().isoformat()))
         DB.commit()
-        results.append({**c, **score, "yt_list": yts})
+        results.append({**c, **score, "yt_list": yts,
+                        "fee_range": fee_range, "fee_basis": fee_basis})
         prog.progress(int((i+1)/total_n*100))
 
     status.success(f"✅ 검증 완료! {total_n}명 처리")
@@ -523,7 +562,9 @@ def step4():
         verdict = v.get("verdict", "")
         name    = v.get("name", "")
 
-        with st.expander(f"{verdict}  {name}  |  {v.get('specialty','')}  |  {total}점",
+        fee_range = v.get("fee_range","")
+        fee_label = f"  |  💰 {fee_range}" if fee_range else ""
+        with st.expander(f"{verdict}  {name}  |  {v.get('specialty','')}  |  {total}점{fee_label}",
                          expanded=(total >= 70)):
             c_score, c_info = st.columns([4,6])
 
@@ -538,6 +579,12 @@ def step4():
                     st.write(f"{label}: **{s}/{mx}점**")
                     st.progress(s/mx if mx else 0)
                 st.metric("종합 점수", f"{total}점")
+                if fee_range:
+                    st.divider()
+                    st.markdown(f"**💰 예상 강연료**")
+                    st.info(fee_range)
+                    if v.get("fee_basis"):
+                        st.caption(v["fee_basis"])
 
             with c_info:
                 st.markdown("**레퍼런스 요약**")
@@ -583,7 +630,7 @@ def step4():
                             v.get("fit_score",0), v.get("target_score",0),
                             v.get("total",0), v.get("verdict",""),
                             v.get("ref_summary",""), v.get("verdict_reason",""),
-                            v.get("yt_list",[])
+                            v.get("yt_list",[]), v.get("fee_range","")
                         )
                         if ok:
                             saved.append(v["name"])
@@ -659,6 +706,101 @@ python auto_run.py
 #    인수: C:\\경로\\강사추천앱\\auto_run.py""", language="bash")
 
 # ─────────────────────────────────────────────
+# Notion 기존 항목 단가 업데이트
+# ─────────────────────────────────────────────
+def tab_notion_update():
+    st.subheader("💰 Notion 기존 강사 단가 업데이트")
+    st.info("Notion DB에 저장된 강사들 중 예상단가가 없는 항목을 조회하고, 웹 서칭으로 단가를 채워 넣습니다.")
+
+    if not (use_notion and notion_token):
+        st.warning("Notion 연동이 설정되지 않았습니다. Streamlit Secrets에 NOTION_TOKEN을 확인하세요.")
+        return
+
+    if st.button("📋 단가 미입력 항목 조회", type="primary"):
+        with st.spinner("Notion에서 항목 불러오는 중..."):
+            try:
+                resp = requests.post(
+                    f"https://api.notion.com/v1/databases/{notion_db_id}/query",
+                    headers={"Authorization": f"Bearer {notion_token}",
+                             "Content-Type": "application/json",
+                             "Notion-Version": "2022-06-28"},
+                    json={"filter": {"property": "예상단가",
+                                     "rich_text": {"is_empty": True}},
+                          "page_size": 50},
+                    timeout=15
+                )
+                if resp.status_code == 200:
+                    pages = resp.json().get("results", [])
+                    st.session_state["notion_no_fee"] = pages
+                    st.success(f"단가 미입력 항목: **{len(pages)}건**")
+                else:
+                    st.error(f"조회 실패: {resp.status_code} — {resp.text[:200]}")
+            except Exception as e:
+                st.error(f"오류: {e}")
+
+    pages = st.session_state.get("notion_no_fee", [])
+    if not pages:
+        return
+
+    # 항목 목록 표시
+    names_in_notion = []
+    for p in pages:
+        props = p.get("properties", {})
+        name = ""
+        try: name = props["강사명"]["title"][0]["text"]["content"]
+        except: pass
+        specialty = ""
+        try: specialty = props["전문분야"]["rich_text"][0]["text"]["content"]
+        except: pass
+        affiliation = ""
+        try: affiliation = props["소속직함"]["rich_text"][0]["text"]["content"]
+        except: pass
+        level = ""
+        try: level = props["강사유형"]["select"]["name"]
+        except: pass
+        names_in_notion.append({"page_id": p["id"], "name": name,
+                                 "specialty": specialty, "affiliation": affiliation,
+                                 "level": level})
+        if name:
+            st.caption(f"· {name} ({specialty})")
+
+    st.write("")
+    if st.button(f"🔄 {len(pages)}건 단가 일괄 업데이트 시작", type="primary"):
+        prog = st.progress(0)
+        status = st.empty()
+        success_count = 0
+        for i, item in enumerate(names_in_notion):
+            name = item["name"]
+            if not name:
+                continue
+            status.info(f"({i+1}/{len(names_in_notion)}) {name} 단가 조사 중...")
+            ref_info = tavily_ref(name)
+            fee_web  = tavily_fee(name)
+            fee_data = estimate_fee(name, item["specialty"], item["affiliation"],
+                                    item["level"], ref_info, fee_web)
+            fee_range = fee_data.get("fee_range", "")
+            if fee_range and fee_range != "추정 불가":
+                try:
+                    r = requests.patch(
+                        f"https://api.notion.com/v1/pages/{item['page_id']}",
+                        headers={"Authorization": f"Bearer {notion_token}",
+                                 "Content-Type": "application/json",
+                                 "Notion-Version": "2022-06-28"},
+                        json={"properties": {
+                            "예상단가": {"rich_text": [{"text": {"content": fee_range}}]}
+                        }},
+                        timeout=10
+                    )
+                    if r.status_code == 200:
+                        success_count += 1
+                except: pass
+            prog.progress(int((i+1)/len(names_in_notion)*100))
+
+        status.success(f"✅ 완료! {success_count}/{len(names_in_notion)}건 업데이트")
+        st.session_state.pop("notion_no_fee", None)
+
+
+# ─────────────────────────────────────────────
 # 이력 탭
 # ─────────────────────────────────────────────
 def tab_history():
@@ -697,7 +839,8 @@ def tab_history():
 st.title("🎯 강사 추천 자동화")
 st.caption("Claude AI · Tavily · YouTube 기반 강사 발굴 및 적합성 검증 시스템")
 
-t_main, t_schedule, t_history = st.tabs(["🔍 강사 추천", "⏰ 스케줄 자동화", "📋 검증 이력"])
+t_main, t_schedule, t_history, t_update = st.tabs(
+    ["🔍 강사 추천", "⏰ 스케줄 자동화", "📋 검증 이력", "💰 단가 업데이트"])
 
 with t_main:
     if   st.session_state.step == 1: step1()
@@ -710,3 +853,6 @@ with t_schedule:
 
 with t_history:
     tab_history()
+
+with t_update:
+    tab_notion_update()
