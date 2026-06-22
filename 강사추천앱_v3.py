@@ -328,14 +328,129 @@ def show_steps(current):
     st.divider()
 
 # ─────────────────────────────────────────────
+# 주제 추천 엔진
+# ─────────────────────────────────────────────
+def search_topic_trends(company_keywords, audience):
+    """Tavily로 최신 트렌드 뉴스 멀티 서칭"""
+    queries = [
+        "기업 교육 HRD 트렌드 2025 2026",
+        "직장인 역량 개발 핫이슈 2025",
+    ]
+    if company_keywords.strip():
+        queries.append(f"{company_keywords} 이슈 트렌드 2025 2026")
+        queries.append(f"{company_keywords} 기업 사례 변화")
+    if audience and "신입" in audience:
+        queries.append("MZ세대 신입사원 교육 트렌드")
+    elif audience and ("임원" in audience or "리더" in audience):
+        queries.append("경영진 리더십 트렌드 2025")
+
+    results = []
+    for q in queries:
+        try:
+            r = requests.post("https://api.tavily.com/search",
+                json={"api_key": TAVILY_KEY, "query": q,
+                      "max_results": 4, "search_depth": "advanced"},
+                timeout=10)
+            if r.status_code == 200:
+                for item in r.json().get("results", []):
+                    results.append({
+                        "title":   item.get("title", ""),
+                        "content": item.get("content", "")[:200],
+                        "url":     item.get("url", ""),
+                    })
+        except: continue
+    return results
+
+def suggest_topics_with_claude(trend_results, company_keywords, audience):
+    """트렌드 데이터 → Claude가 주제 제안"""
+    trend_text = "\n".join(
+        f"- {r['title']}: {r['content']}" for r in trend_results[:12]
+    )
+    audience_str = audience if audience else "전사원"
+    company_str  = f"회사/업종 키워드: {company_keywords}" if company_keywords.strip() else ""
+
+    prompt = f"""당신은 기업 HRD 담당자입니다. 아래 최신 트렌드 뉴스와 회사 맥락을 바탕으로
+교육 주제를 제안해주세요.
+
+교육 대상: {audience_str}
+{company_str}
+
+[최신 트렌드 뉴스]
+{trend_text}
+
+조건:
+- 지금 당장 기업에서 필요한 현실적인 주제
+- 트렌드와 연관성이 높은 것
+- 구체적이고 강연 제목으로 바로 쓸 수 있는 수준
+
+JSON 배열로만 응답:
+[
+  {{"topic": "강연 주제", "reason": "이 주제가 지금 필요한 이유 (1~2문장)", "trend_basis": "관련 트렌드 키워드"}}
+]
+총 7개 제안."""
+    try:
+        r = claude_client().messages.create(
+            model="claude-opus-4-5", max_tokens=1500,
+            messages=[{"role": "user", "content": prompt}])
+        m = re.search(r'\[.*\]', r.content[0].text, re.DOTALL)
+        if m:
+            return json.loads(m.group())
+    except: pass
+    return []
+
+
+# ─────────────────────────────────────────────
 # STEP 1 : 조건 입력
 # ─────────────────────────────────────────────
 def step1():
     show_steps(1)
     st.subheader("교육 조건을 입력해 주세요")
 
+    # ── 주제 추천 섹션 ────────────────────────
+    with st.expander("💡 주제가 떠오르지 않는다면? 트렌드 기반 추천받기", expanded=False):
+        st.caption("최신 뉴스와 HRD 트렌드를 분석해 지금 꼭 필요한 강연 주제를 제안합니다.")
+        COMPANY = "삼성전기 (Samsung Electro-mechanics)"
+        suggest_audience = st.selectbox(
+            "교육 대상 (미리 선택)",
+            AUDIENCE_OPTIONS[:-1], key="suggest_aud"
+        )
+
+        if st.button("🔍 트렌드 분석 후 주제 추천", key="btn_suggest"):
+            with st.spinner("최신 뉴스·트렌드 서칭 중... (10~20초 소요)"):
+                trends = search_topic_trends(COMPANY, suggest_audience)
+            if not trends:
+                st.warning("트렌드 검색에 실패했습니다. Tavily 키를 확인하세요.")
+            else:
+                with st.spinner("Claude가 주제를 분석 중..."):
+                    suggestions = suggest_topics_with_claude(
+                        trends, COMPANY, suggest_audience)
+                if suggestions:
+                    st.session_state["topic_suggestions"] = suggestions
+                    st.session_state["suggest_audience_val"] = suggest_audience
+                else:
+                    st.warning("주제 생성에 실패했습니다.")
+
+        suggestions = st.session_state.get("topic_suggestions", [])
+        if suggestions:
+            st.write("**📋 추천 강연 주제** — 클릭하면 바로 입력됩니다")
+            for i, s in enumerate(suggestions):
+                col_btn, col_desc = st.columns([3, 7])
+                with col_btn:
+                    if st.button(f"➕ {s['topic']}", key=f"pick_topic_{i}"):
+                        st.session_state["picked_topic"] = s["topic"]
+                        st.session_state["picked_audience"] = st.session_state.get(
+                            "suggest_audience_val", AUDIENCE_OPTIONS[0])
+                        st.rerun()
+                with col_desc:
+                    st.caption(f"{s.get('reason','')}  |  🔖 {s.get('trend_basis','')}")
+
+    st.write("")
+    # 추천 주제가 선택된 경우 자동 반영
+    picked = st.session_state.pop("picked_topic", None)
+    default_topic = picked if picked else st.session_state.topic
+
     topic = st.text_input("📌 교육 주제",
-        value=st.session_state.topic,
+        value=default_topic,
         placeholder="예: 리더십, AI 활용, 조직문화 혁신...")
 
     st.write("")
@@ -367,7 +482,7 @@ def step1():
 
     st.write("")
     st.markdown("**👥 교육 대상**")
-    saved_audience = st.session_state.audience
+    saved_audience = st.session_state.pop("picked_audience", None) or st.session_state.audience
     audience_idx = AUDIENCE_OPTIONS.index(saved_audience) if saved_audience in AUDIENCE_OPTIONS else 0
     audience_raw = st.selectbox(
         label="교육 대상 선택",
