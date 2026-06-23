@@ -118,20 +118,34 @@ def api_ok():
 def claude_client():
     return anthropic.Anthropic(api_key=CLAUDE_KEY)
 
-def claude_call(model, max_tokens, messages, retries=3, base_wait=5):
-    """Claude API 호출 — 529 과부하 오류 시 자동 재시도"""
+def claude_call(model, max_tokens, messages, retries=2, base_wait=3):
+    """Claude API 호출 — 529 과부하 시 재시도 + 모델 폴백 (Opus → Sonnet → Haiku)"""
+    FALLBACK_MODELS = [
+        "claude-opus-4-5",
+        "claude-sonnet-4-6",
+        "claude-haiku-4-5-20251001",
+    ]
+    # 요청 모델부터 시작해서 폴백 순서 결정
+    start_idx = next((i for i, m in enumerate(FALLBACK_MODELS) if model in m), 0)
+    models_to_try = FALLBACK_MODELS[start_idx:]
+
     client = claude_client()
-    for attempt in range(retries):
-        try:
-            return client.messages.create(
-                model=model, max_tokens=max_tokens, messages=messages)
-        except anthropic.APIStatusError as e:
-            if e.status_code == 529 and attempt < retries - 1:
-                wait = base_wait * (2 ** attempt)   # 5s → 10s → 20s
-                time.sleep(wait)
-                continue
-            raise
-    return None
+    last_err = None
+    for m in models_to_try:
+        for attempt in range(retries):
+            try:
+                return client.messages.create(
+                    model=m, max_tokens=max_tokens, messages=messages)
+            except anthropic.APIStatusError as e:
+                last_err = e
+                if e.status_code == 529 and attempt < retries - 1:
+                    time.sleep(base_wait * (2 ** attempt))   # 3s → 6s
+                    continue
+                elif e.status_code == 529:
+                    break  # 이 모델 포기 → 다음 모델로
+                else:
+                    raise
+    raise last_err
 
 def get_candidates(topic, levels, audience, background="", exclude=None, count=10, extra_direction=""):
     exclude = exclude or []
