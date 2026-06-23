@@ -498,7 +498,9 @@ def step1():
     st.write("")
     # 추천 주제가 선택된 경우 자동 반영
     picked = st.session_state.pop("picked_topic", None)
-    default_topic = picked if picked else st.session_state.topic
+    if picked:
+        st.session_state.topic = picked   # ← 세션에 저장해야 버튼 클릭 후도 유지됨
+    default_topic = st.session_state.topic
 
     topic = st.text_input("📌 교육 주제",
         value=default_topic,
