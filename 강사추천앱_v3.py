@@ -11,6 +11,7 @@ import sqlite3
 import json
 import re
 import requests
+import time
 from datetime import datetime
 import os
 from dotenv import load_dotenv
@@ -117,6 +118,21 @@ def api_ok():
 def claude_client():
     return anthropic.Anthropic(api_key=CLAUDE_KEY)
 
+def claude_call(model, max_tokens, messages, retries=3, base_wait=5):
+    """Claude API 호출 — 529 과부하 오류 시 자동 재시도"""
+    client = claude_client()
+    for attempt in range(retries):
+        try:
+            return client.messages.create(
+                model=model, max_tokens=max_tokens, messages=messages)
+        except anthropic.APIStatusError as e:
+            if e.status_code == 529 and attempt < retries - 1:
+                wait = base_wait * (2 ** attempt)   # 5s → 10s → 20s
+                time.sleep(wait)
+                continue
+            raise
+    return None
+
 def get_candidates(topic, levels, audience, background="", exclude=None, count=10, extra_direction=""):
     exclude = exclude or []
     background_str = f"\n강연 배경/맥락: {background}" if background else ""
@@ -130,9 +146,8 @@ def get_candidates(topic, levels, audience, background="", exclude=None, count=1
 JSON 배열로만 응답 (다른 텍스트 없이):
 [{{"name":"강사명","level":"분류","specialty":"전문분야","affiliation":"소속/직함","reason":"추천이유(2문장)","keyword":"검색키워드","fee_range":"예상강연료(예:300~500만원)"}}]"""
     try:
-        r = claude_client().messages.create(
-            model="claude-opus-4-5", max_tokens=3000,
-            messages=[{"role":"user","content":prompt}])
+        r = claude_call("claude-opus-4-5", 3000,
+            [{"role":"user","content":prompt}])
         m = re.search(r'\[.*\]', r.content[0].text, re.DOTALL)
         if m: return json.loads(m.group())
     except Exception as e:
@@ -209,9 +224,8 @@ def estimate_fee(name, specialty, affiliation, level, ref_info, fee_web):
 JSON으로만 응답:
 {{"fee_range":"예: 300~500만원","fee_basis":"추정 근거 (1문장)"}}"""
     try:
-        r = claude_client().messages.create(
-            model="claude-opus-4-5", max_tokens=200,
-            messages=[{"role":"user","content":prompt}])
+        r = claude_call("claude-opus-4-5", 200,
+            [{"role":"user","content":prompt}])
         m = re.search(r'\{.*\}', r.content[0].text, re.DOTALL)
         if m:
             return json.loads(m.group())
@@ -240,9 +254,8 @@ JSON으로만:
 {{"yt_score":0~40,"ref_score":0~30,"fit_score":0~20,"target_score":0~10,
   "ref_summary":"레퍼런스 요약(2~3문장)","verdict_reason":"판정 근거(1~2문장)"}}"""
     try:
-        r = claude_client().messages.create(
-            model="claude-opus-4-5", max_tokens=500,
-            messages=[{"role":"user","content":prompt}])
+        r = claude_call("claude-opus-4-5", 500,
+            [{"role":"user","content":prompt}])
         m = re.search(r'\{.*\}', r.content[0].text, re.DOTALL)
         if m:
             d = json.loads(m.group())
@@ -408,9 +421,8 @@ def suggest_topics_with_claude(trend_results, company_keywords, audience):
 
 총 7개."""
     try:
-        r = claude_client().messages.create(
-            model="claude-opus-4-5", max_tokens=2000,
-            messages=[{"role": "user", "content": prompt}])
+        r = claude_call("claude-opus-4-5", 2000,
+            [{"role": "user", "content": prompt}])
         text = r.content[0].text.strip()
         # JSON 블록 추출 (```json ... ``` 또는 [ ... ] 형태 모두 처리)
         text = re.sub(r'^```[a-z]*\n?', '', text)
@@ -924,9 +936,8 @@ JSON으로만 응답:
 대학교수/연구원, 프리랜서 강사, 유튜버/크리에이터, 연예인/방송인, 운동선수/스포츠인,
 작가/저술가, 컨설팅펌 전문가, 기업체 대표/임원, 스타트업 창업자, 정부/공공기관 전문가"""
     try:
-        r = claude_client().messages.create(
-            model="claude-opus-4-5", max_tokens=300,
-            messages=[{"role":"user","content":prompt}])
+        r = claude_call("claude-opus-4-5", 300,
+            [{"role":"user","content":prompt}])
         m = re.search(r'\{.*\}', r.content[0].text, re.DOTALL)
         if m:
             return json.loads(m.group())
