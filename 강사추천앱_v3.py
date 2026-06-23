@@ -17,7 +17,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-st.set_page_config(page_title="강사 추천 자동화", page_icon="🎯", layout="wide")
+st.set_page_config(page_title="강사 추천 Bot", page_icon="🤖", layout="wide")
 
 # ─────────────────────────────────────────────
 # 상수
@@ -311,20 +311,37 @@ def notion_save(name, specialty, affiliation, level, topic, audience,
 # 진행 단계 표시
 # ─────────────────────────────────────────────
 def show_steps(current):
-    st.write("")
-    c1, c2, c3, c4 = st.columns(4)
-    for col, n, label in [
-        (c1,1,"① 조건 입력"),
-        (c2,2,"② 후보 선택"),
-        (c3,3,"③ 적합성 검증"),
-        (c4,4,"④ 결과 · 저장"),
-    ]:
+    steps = [
+        ("①", "조건 입력",    "topic, 강사유형, 교육대상"),
+        ("②", "후보 선택",    "10명 후보 검토 및 선택"),
+        ("③", "적합성 검증",  "AI 100점 자동 채점"),
+        ("④", "결과 · 저장", "결과 확인 및 Notion 저장"),
+    ]
+    cols = st.columns(4)
+    for i, (col, (num, title, desc)) in enumerate(zip(cols, steps)):
+        n = i + 1
         if n < current:
-            col.success(f"✅ {label}")
+            bg, border, icon, title_color, badge = "#d4edda", "#28a745", "✅", "#155724", "완료"
         elif n == current:
-            col.info(f"▶ {label}")
+            bg, border, icon, title_color, badge = "#cce5ff", "#0d6efd", "▶", "#003d99", "진행 중"
         else:
-            col.write(f"○ {label}")
+            bg, border, icon, title_color, badge = "#f8f9fa", "#dee2e6", "○", "#6c757d", "대기"
+
+        col.markdown(f"""
+<div style="
+  background:{bg};border:2px solid {border};border-radius:12px;
+  padding:14px 10px;text-align:center;min-height:100px;
+">
+  <div style="font-size:22px;margin-bottom:4px">{icon}</div>
+  <div style="font-size:12px;font-weight:bold;color:{title_color};margin-bottom:2px">{num} {title}</div>
+  <div style="font-size:10px;color:{title_color};opacity:0.8;margin-bottom:6px">{desc}</div>
+  <span style="
+    background:{border};color:white;border-radius:20px;
+    padding:2px 8px;font-size:10px;font-weight:bold
+  ">{badge}</span>
+</div>""", unsafe_allow_html=True)
+
+    st.write("")
     st.divider()
 
 # ─────────────────────────────────────────────
@@ -338,9 +355,9 @@ def search_topic_trends(company_keywords, audience):
     ]
     if company_keywords.strip():
         queries.append(f"{company_keywords} 이슈 트렌드 2025 2026")
-        queries.append(f"{company_keywords} 기업 사례 변화")
+        queries.append(f"{company_keywords} 기업 변화 사례")
     if audience and "신입" in audience:
-        queries.append("MZ세대 신입사원 교육 트렌드")
+        queries.append("MZ세대 신입사원 교육 트렌드 2025")
     elif audience and ("임원" in audience or "리더" in audience):
         queries.append("경영진 리더십 트렌드 2025")
 
@@ -348,9 +365,8 @@ def search_topic_trends(company_keywords, audience):
     for q in queries:
         try:
             r = requests.post("https://api.tavily.com/search",
-                json={"api_key": TAVILY_KEY, "query": q,
-                      "max_results": 4, "search_depth": "advanced"},
-                timeout=10)
+                json={"api_key": TAVILY_KEY, "query": q, "max_results": 4},
+                timeout=12)
             if r.status_code == 200:
                 for item in r.json().get("results", []):
                     results.append({
@@ -363,39 +379,47 @@ def search_topic_trends(company_keywords, audience):
 
 def suggest_topics_with_claude(trend_results, company_keywords, audience):
     """트렌드 데이터 → Claude가 주제 제안"""
-    trend_text = "\n".join(
-        f"- {r['title']}: {r['content']}" for r in trend_results[:12]
-    )
     audience_str = audience if audience else "전사원"
-    company_str  = f"회사/업종 키워드: {company_keywords}" if company_keywords.strip() else ""
+    company_str  = f"회사: {company_keywords}" if company_keywords.strip() else ""
 
-    prompt = f"""당신은 기업 HRD 담당자입니다. 아래 최신 트렌드 뉴스와 회사 맥락을 바탕으로
-교육 주제를 제안해주세요.
+    if trend_results:
+        trend_text = "\n".join(
+            f"- {r['title']}: {r['content']}" for r in trend_results[:12]
+        )
+        context = f"[최신 트렌드 뉴스]\n{trend_text}"
+    else:
+        context = "[트렌드 뉴스 없음 — 일반적인 기업 교육 트렌드 기준으로 제안]"
+
+    prompt = f"""당신은 기업 HRD 담당자입니다. 아래 맥락을 바탕으로 교육 주제를 제안해주세요.
 
 교육 대상: {audience_str}
 {company_str}
 
-[최신 트렌드 뉴스]
-{trend_text}
+{context}
 
 조건:
 - 지금 당장 기업에서 필요한 현실적인 주제
-- 트렌드와 연관성이 높은 것
 - 구체적이고 강연 제목으로 바로 쓸 수 있는 수준
+- 반드시 아래 JSON 형식만 출력 (다른 텍스트 없이)
 
-JSON 배열로만 응답:
 [
   {{"topic": "강연 주제", "reason": "이 주제가 지금 필요한 이유 (1~2문장)", "trend_basis": "관련 트렌드 키워드"}}
 ]
-총 7개 제안."""
+
+총 7개."""
     try:
         r = claude_client().messages.create(
-            model="claude-opus-4-5", max_tokens=1500,
+            model="claude-opus-4-5", max_tokens=2000,
             messages=[{"role": "user", "content": prompt}])
-        m = re.search(r'\[.*\]', r.content[0].text, re.DOTALL)
+        text = r.content[0].text.strip()
+        # JSON 블록 추출 (```json ... ``` 또는 [ ... ] 형태 모두 처리)
+        text = re.sub(r'^```[a-z]*\n?', '', text)
+        text = re.sub(r'\n?```$', '', text)
+        m = re.search(r'\[.*\]', text, re.DOTALL)
         if m:
             return json.loads(m.group())
-    except: pass
+    except Exception as e:
+        st.error(f"주제 생성 오류: {e}")
     return []
 
 
@@ -427,8 +451,9 @@ def step1():
                 if suggestions:
                     st.session_state["topic_suggestions"] = suggestions
                     st.session_state["suggest_audience_val"] = suggest_audience
+                    st.success(f"트렌드 기사 {len(trends)}건 분석 완료 → 주제 {len(suggestions)}개 생성")
                 else:
-                    st.warning("주제 생성에 실패했습니다.")
+                    st.warning(f"주제 생성에 실패했습니다. (트렌드 기사 {len(trends)}건 수집됨)")
 
         suggestions = st.session_state.get("topic_suggestions", [])
         if suggestions:
@@ -782,10 +807,20 @@ def tab_schedule():
     """)
 
     st.markdown("**자동화 조건 설정**")
-    a_topic    = st.text_input("교육 주제", key="a_topic")
+    a_topic    = st.text_input("교육 주제",
+        key="a_topic",
+        placeholder="비워두면 최신 트렌드 뉴스 기반으로 자동 생성됩니다 → 강사 수는 1명으로 제한")
     a_levels   = st.multiselect("강사 유형", INSTRUCTOR_LEVELS, key="a_levels")
     a_audience = st.selectbox("교육 대상",   AUDIENCE_OPTIONS,  key="a_audience")
-    a_count    = st.slider("추천 강사 수", 5, 10, 7, key="a_count")
+
+    auto_topic_mode = not bool(a_topic.strip())
+    if auto_topic_mode:
+        st.caption("💡 주제 미입력 상태 — 저장 시 트렌드 기반 주제를 자동 생성하고 **강사 수는 1명**으로 설정됩니다.")
+        a_count = 1
+        st.info("강사 수: **1명** (주제 자동 생성 모드)")
+    else:
+        a_count = st.slider("추천 강사 수", 1, 10, 5, key="a_count")
+
     a_thresh   = st.slider("자동 Notion 저장 기준 점수", 50, 90, 70, key="a_thresh",
                            help="이 점수 이상인 강사만 자동으로 Notion에 저장됩니다")
 
@@ -794,13 +829,33 @@ def tab_schedule():
     a_hour = st.slider("실행 시각 (시)", 0, 23, 9, key="a_hour")
 
     if st.button("💾 설정 저장 (schedule_config.json)", type="primary"):
+        final_topic = a_topic.strip()
+        final_count = a_count
+
+        if not final_topic:
+            # 자동 주제 생성
+            with st.spinner("최신 트렌드 분석 중..."):
+                COMPANY = "삼성전기 (Samsung Electro-mechanics)"
+                audience_val = a_audience if a_audience != "기타 (직접 입력)" else "전사원"
+                trends = search_topic_trends(COMPANY, audience_val)
+            with st.spinner("Claude가 주제를 선정 중..."):
+                suggestions = suggest_topics_with_claude(trends, COMPANY, audience_val)
+            if suggestions:
+                final_topic = suggestions[0]["topic"]
+                final_count = 1
+                st.success(f"✅ 자동 생성 주제: **{final_topic}**")
+            else:
+                st.error("주제 자동 생성에 실패했습니다. 직접 입력 후 다시 시도해 주세요.")
+                return
+
         cfg = {
-            "topic": a_topic, "levels": a_levels, "audience": a_audience,
-            "count": a_count, "threshold": a_thresh,
+            "topic": final_topic, "levels": a_levels, "audience": a_audience,
+            "count": final_count, "threshold": a_thresh,
             "frequency": a_freq, "run_hour": a_hour,
-            "ANTHROPIC_API_KEY": claude_key,
-            "TAVILY_API_KEY":    tavily_key,
-            "YOUTUBE_API_KEY":   youtube_key,
+            "auto_topic": not bool(a_topic.strip()),
+            "ANTHROPIC_API_KEY": CLAUDE_KEY,
+            "TAVILY_API_KEY":    TAVILY_KEY,
+            "YOUTUBE_API_KEY":   YOUTUBE_KEY,
             "NOTION_TOKEN":  notion_token if use_notion else "",
             "NOTION_DB_ID":  notion_db_id if use_notion else "",
         }
@@ -821,98 +876,266 @@ python auto_run.py
 #    인수: C:\\경로\\강사추천앱\\auto_run.py""", language="bash")
 
 # ─────────────────────────────────────────────
-# Notion 기존 항목 단가 업데이트
+# Notion DB 전체 업데이트
 # ─────────────────────────────────────────────
-def tab_notion_update():
-    st.subheader("💰 Notion 기존 강사 단가 업데이트")
-    st.info("Notion DB에 저장된 강사들 중 예상단가가 없는 항목을 조회하고, 웹 서칭으로 단가를 채워 넣습니다.")
+def _prop_text(props, key):
+    """Notion rich_text / title 속성에서 텍스트 추출"""
+    try:
+        p = props[key]
+        if "title" in p:
+            return p["title"][0]["text"]["content"]
+        if "rich_text" in p:
+            return p["rich_text"][0]["text"]["content"]
+        if "select" in p and p["select"]:
+            return p["select"]["name"]
+        if "number" in p and p["number"] is not None:
+            return str(p["number"])
+    except: pass
+    return ""
+
+def _is_empty_prop(props, key, prop_type="rich_text"):
+    """Notion 속성이 비어있는지 확인"""
+    try:
+        p = props[key]
+        if prop_type == "title":
+            return not p["title"]
+        if prop_type == "rich_text":
+            return not p["rich_text"]
+        if prop_type == "select":
+            return p["select"] is None
+        if prop_type == "number":
+            return p["number"] is None
+    except: pass
+    return True
+
+def _infer_profile_with_claude(name, ref_info):
+    """ref_info에서 전문분야/소속/강사유형 추론"""
+    prompt = f"""강사 정보를 웹 검색 결과를 바탕으로 추론하세요.
+
+강사명: {name}
+웹 검색 결과:
+{ref_info[:500]}
+
+JSON으로만 응답:
+{{"specialty":"전문분야(2~4단어)", "affiliation":"소속/직함", "level":"강사분류",
+  "topic":"이 강사에게 적합한 강연 주제(구체적 제목)"}}
+
+강사분류는 반드시 아래 중 하나:
+대학교수/연구원, 프리랜서 강사, 유튜버/크리에이터, 연예인/방송인, 운동선수/스포츠인,
+작가/저술가, 컨설팅펌 전문가, 기업체 대표/임원, 스타트업 창업자, 정부/공공기관 전문가"""
+    try:
+        r = claude_client().messages.create(
+            model="claude-opus-4-5", max_tokens=300,
+            messages=[{"role":"user","content":prompt}])
+        m = re.search(r'\{.*\}', r.content[0].text, re.DOTALL)
+        if m:
+            return json.loads(m.group())
+    except: pass
+    return {"specialty":"", "affiliation":"", "level":"프리랜서 강사", "topic":""}
+
+def tab_db_update():
+    st.subheader("🗄️ Notion DB 업데이트")
+    st.info("""Notion DB에 **강사명만** 추가한 경우, 비어있는 모든 필드를 자동으로 채워드립니다.
+전문분야 · 소속 · 강사유형 · 점수 · 판정 · YouTube URL · 레퍼런스 요약 · 예상 강연료""")
 
     if not (use_notion and notion_token):
         st.warning("Notion 연동이 설정되지 않았습니다. Streamlit Secrets에 NOTION_TOKEN을 확인하세요.")
         return
 
-    if st.button("📋 단가 미입력 항목 조회", type="primary"):
-        with st.spinner("Notion에서 항목 불러오는 중..."):
+    if st.button("📋 업데이트 필요 항목 조회", type="primary"):
+        with st.spinner("Notion DB 조회 중..."):
             try:
-                resp = requests.post(
-                    f"https://api.notion.com/v1/databases/{notion_db_id}/query",
-                    headers={"Authorization": f"Bearer {notion_token}",
-                             "Content-Type": "application/json",
-                             "Notion-Version": "2022-06-28"},
-                    json={"filter": {"property": "예상단가",
-                                     "rich_text": {"is_empty": True}},
-                          "page_size": 50},
-                    timeout=15
-                )
-                if resp.status_code == 200:
-                    pages = resp.json().get("results", [])
-                    st.session_state["notion_no_fee"] = pages
-                    st.success(f"단가 미입력 항목: **{len(pages)}건**")
-                else:
-                    st.error(f"조회 실패: {resp.status_code} — {resp.text[:200]}")
+                # 전체 페이지 조회 (강사명 있는 항목)
+                all_pages, cursor = [], None
+                while True:
+                    body = {"page_size": 100}
+                    if cursor:
+                        body["start_cursor"] = cursor
+                    resp = requests.post(
+                        f"https://api.notion.com/v1/databases/{notion_db_id}/query",
+                        headers={"Authorization": f"Bearer {notion_token}",
+                                 "Content-Type": "application/json",
+                                 "Notion-Version": "2022-06-28"},
+                        json=body, timeout=15
+                    )
+                    if resp.status_code != 200:
+                        st.error(f"조회 실패: {resp.status_code} — {resp.text[:200]}")
+                        break
+                    data = resp.json()
+                    all_pages.extend(data.get("results", []))
+                    if not data.get("has_more"):
+                        break
+                    cursor = data.get("next_cursor")
+
+                # 강사명 있고 빈 필드 있는 항목 필터링
+                needs_update = []
+                for p in all_pages:
+                    props = p.get("properties", {})
+                    name = _prop_text(props, "강사명")
+                    if not name:
+                        continue
+                    # 주요 필드 비어있는지 확인
+                    empty_fields = []
+                    if _is_empty_prop(props, "전문분야"):      empty_fields.append("전문분야")
+                    if _is_empty_prop(props, "소속직함"):      empty_fields.append("소속직함")
+                    if _is_empty_prop(props, "강사유형","select"): empty_fields.append("강사유형")
+                    if _is_empty_prop(props, "판정","select"):  empty_fields.append("판정")
+                    if _is_empty_prop(props, "예상단가"):       empty_fields.append("예상단가")
+                    if _is_empty_prop(props, "유튜브URL"):      empty_fields.append("유튜브URL")
+                    if empty_fields:
+                        needs_update.append({
+                            "page_id":     p["id"],
+                            "name":        name,
+                            "specialty":   _prop_text(props, "전문분야"),
+                            "affiliation": _prop_text(props, "소속직함"),
+                            "level":       _prop_text(props, "강사유형"),
+                            "topic":       _prop_text(props, "교육주제"),
+                            "audience":    _prop_text(props, "교육대상"),
+                            "empty_fields": empty_fields,
+                        })
+                st.session_state["db_update_pages"] = needs_update
+                st.success(f"전체 {len(all_pages)}건 중 업데이트 필요: **{len(needs_update)}건**")
             except Exception as e:
                 st.error(f"오류: {e}")
 
-    pages = st.session_state.get("notion_no_fee", [])
+    pages = st.session_state.get("db_update_pages", [])
     if not pages:
         return
 
-    # 항목 목록 표시
-    names_in_notion = []
-    for p in pages:
-        props = p.get("properties", {})
-        name = ""
-        try: name = props["강사명"]["title"][0]["text"]["content"]
-        except: pass
-        specialty = ""
-        try: specialty = props["전문분야"]["rich_text"][0]["text"]["content"]
-        except: pass
-        affiliation = ""
-        try: affiliation = props["소속직함"]["rich_text"][0]["text"]["content"]
-        except: pass
-        level = ""
-        try: level = props["강사유형"]["select"]["name"]
-        except: pass
-        names_in_notion.append({"page_id": p["id"], "name": name,
-                                 "specialty": specialty, "affiliation": affiliation,
-                                 "level": level})
-        if name:
-            st.caption(f"· {name} ({specialty})")
+    st.write("")
+    st.markdown("**업데이트 대상 항목**")
+    for item in pages:
+        missing = ", ".join(item["empty_fields"])
+        st.caption(f"· **{item['name']}** — 미입력: `{missing}`")
 
     st.write("")
-    if st.button(f"🔄 {len(pages)}건 단가 일괄 업데이트 시작", type="primary"):
-        prog = st.progress(0)
+    if st.button(f"🔄 {len(pages)}건 전체 필드 자동 채우기 시작", type="primary"):
+        prog   = st.progress(0)
         status = st.empty()
         success_count = 0
-        for i, item in enumerate(names_in_notion):
+        COMPANY = "삼성전기 (Samsung Electro-mechanics)"
+
+        audience_map = {
+            "신입사원":    "신입사원 (1~3년차)",
+            "주임대리급":  "주임·대리급 (3~7년차)",
+            "과장차장급":  "과장·차장급 (7~12년차)",
+            "팀장/리더급": "팀장 / 리더급",
+            "임원/경영진": "임원 / 경영진",
+            "전사원":      "전사원 (전 직급 통합)",
+        }
+        level_map = {
+            "대학교수/연구원":     "대학교수/연구원",
+            "프리랜서 강사":       "프리랜서 강사",
+            "유튜버/크리에이터":   "유튜버/크리에이터",
+            "연예인/방송인":       "연예인/방송인",
+            "운동선수/스포츠인":   "운동선수/스포츠인",
+            "작가/저술가":         "작가/저술가",
+            "컨설팅펌 전문가":     "컨설팅펌 전문가",
+            "기업체 대표/임원":    "기업체 대표/임원",
+            "스타트업 창업자":     "스타트업 창업자",
+            "정부/공공기관 전문가":"정부/공공기관 전문가",
+        }
+
+        for i, item in enumerate(pages):
             name = item["name"]
             if not name:
                 continue
-            status.info(f"({i+1}/{len(names_in_notion)}) {name} 단가 조사 중...")
+            status.info(f"({i+1}/{len(pages)}) **{name}** 정보 수집 중...")
+
+            # 1) 웹 레퍼런스
             ref_info = tavily_ref(name)
+
+            # 2) 프로필 보강 (전문분야/소속/유형 비었으면 Claude로 추론)
+            specialty   = item["specialty"]
+            affiliation = item["affiliation"]
+            level       = item["level"]
+            topic       = item["topic"]
+            audience    = item["audience"]
+
+            if not specialty or not affiliation or not level:
+                status.info(f"({i+1}/{len(pages)}) **{name}** — 프로필 분석 중...")
+                inferred = _infer_profile_with_claude(name, ref_info)
+                specialty   = specialty   or inferred.get("specialty", "")
+                affiliation = affiliation or inferred.get("affiliation", "")
+                level       = level       or inferred.get("level", "프리랜서 강사")
+                topic       = topic       or inferred.get("topic", f"{specialty} 강연")
+
+            audience = audience or "전사원 (전 직급 통합)"
+            topic    = topic    or f"{specialty} 강연"
+
+            # 3) YouTube 검색
+            status.info(f"({i+1}/{len(pages)}) **{name}** — YouTube 검색 중...")
+            yts = youtube_top3(name, topic)
+
+            # 4) 적합성 채점
+            status.info(f"({i+1}/{len(pages)}) **{name}** — 적합성 채점 중...")
+            levels_list = [level] if level else []
+            score = verify(name, specialty, affiliation, topic,
+                           levels_list, audience, ref_info, yts)
+
+            # 5) 강연료 추정
+            status.info(f"({i+1}/{len(pages)}) **{name}** — 강연료 추정 중...")
             fee_web  = tavily_fee(name)
-            fee_data = estimate_fee(name, item["specialty"], item["affiliation"],
-                                    item["level"], ref_info, fee_web)
+            fee_data = estimate_fee(name, specialty, affiliation, level, ref_info, fee_web)
             fee_range = fee_data.get("fee_range", "")
-            if fee_range and fee_range != "추정 불가":
+
+            # 6) Notion에서 교육대상/강사유형 SELECT 값 변환
+            notion_audience = audience_map.get(audience, audience.split("(")[0].strip())
+            notion_level    = level_map.get(level, level)
+            yt_text         = "\n".join(x["url"] for x in yts)
+            total           = score.get("total", 0)
+            verdict         = score.get("verdict", "")
+            ref_summary     = score.get("ref_summary", "")
+            verdict_reason  = score.get("verdict_reason", "")
+
+            # 7) Notion PATCH — 비어있는 필드만 업데이트
+            patch_props = {}
+            empty = set(item["empty_fields"])
+            if "전문분야"  in empty and specialty:
+                patch_props["전문분야"]   = {"rich_text": [{"text": {"content": specialty}}]}
+            if "소속직함"  in empty and affiliation:
+                patch_props["소속직함"]   = {"rich_text": [{"text": {"content": affiliation}}]}
+            if "강사유형"  in empty and notion_level:
+                patch_props["강사유형"]   = {"select": {"name": notion_level}}
+            if "교육대상"  in empty and notion_audience:
+                patch_props["교육대상"]   = {"select": {"name": notion_audience}}
+            if "교육주제"  in empty and topic:
+                patch_props["교육주제"]   = {"rich_text": [{"text": {"content": topic}}]}
+            if "유튜브URL" in empty and yt_text:
+                patch_props["유튜브URL"]  = {"rich_text": [{"text": {"content": yt_text[:2000]}}]}
+            if "판정"      in empty and verdict:
+                patch_props["판정"]       = {"select": {"name": verdict}}
+                patch_props["YouTube점수"]= {"number": score.get("yt_score", 0)}
+                patch_props["레퍼런스점수"]={"number": score.get("ref_score", 0)}
+                patch_props["전문분야일치"]={"number": score.get("fit_score", 0)}
+                patch_props["교육대상적합"]={"number": score.get("target_score", 0)}
+                patch_props["종합점수"]   = {"number": total}
+                patch_props["별점"]       = {"number": round(total / 10)}
+            if "레퍼런스요약" in empty and ref_summary:
+                patch_props["레퍼런스요약"]={"rich_text":[{"text":{"content":ref_summary[:2000]}}]}
+            if "판정근거" in empty and verdict_reason:
+                patch_props["판정근거"]   = {"rich_text":[{"text":{"content":verdict_reason[:500]}}]}
+            if "예상단가" in empty and fee_range and fee_range != "추정 불가":
+                patch_props["예상단가"]   = {"rich_text":[{"text":{"content":fee_range}}]}
+
+            if patch_props:
                 try:
                     r = requests.patch(
                         f"https://api.notion.com/v1/pages/{item['page_id']}",
                         headers={"Authorization": f"Bearer {notion_token}",
                                  "Content-Type": "application/json",
                                  "Notion-Version": "2022-06-28"},
-                        json={"properties": {
-                            "예상단가": {"rich_text": [{"text": {"content": fee_range}}]}
-                        }},
+                        json={"properties": patch_props},
                         timeout=10
                     )
                     if r.status_code == 200:
                         success_count += 1
                 except: pass
-            prog.progress(int((i+1)/len(names_in_notion)*100))
 
-        status.success(f"✅ 완료! {success_count}/{len(names_in_notion)}건 업데이트")
-        st.session_state.pop("notion_no_fee", None)
+            prog.progress(int((i + 1) / len(pages) * 100))
+
+        status.success(f"✅ 완료! {success_count}/{len(pages)}건 업데이트")
+        st.session_state.pop("db_update_pages", None)
 
 
 # ─────────────────────────────────────────────
@@ -951,11 +1174,11 @@ def tab_history():
 # ─────────────────────────────────────────────
 # 메인
 # ─────────────────────────────────────────────
-st.title("🎯 강사 추천 자동화")
+st.title("🤖 강사 추천 Bot")
 st.caption("Claude AI · Tavily · YouTube 기반 강사 발굴 및 적합성 검증 시스템")
 
 t_main, t_schedule, t_history, t_update = st.tabs(
-    ["🔍 강사 추천", "⏰ 스케줄 자동화", "📋 검증 이력", "💰 단가 업데이트"])
+    ["🔍 강사 추천", "⏰ 스케줄 자동화", "📋 검증 이력", "🗄️ DB 업데이트"])
 
 with t_main:
     if   st.session_state.step == 1: step1()
@@ -970,4 +1193,4 @@ with t_history:
     tab_history()
 
 with t_update:
-    tab_notion_update()
+    tab_db_update()
