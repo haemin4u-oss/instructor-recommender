@@ -246,6 +246,51 @@ JSON으로만 응답:
     except: pass
     return {"fee_range":"추정 불가", "fee_basis":""}
 
+def tavily_contact(name):
+    """강사 연락처/섭외 정보 웹 검색"""
+    try:
+        r = requests.post("https://api.tavily.com/search",
+            json={"api_key": TAVILY_KEY,
+                  "query": f"{name} 강사 연락처 이메일 섭외 문의 booking",
+                  "max_results": 5},
+            timeout=10)
+        if r.status_code == 200:
+            items = r.json().get("results", [])
+            return " | ".join(x.get("content","")[:200] for x in items[:3])
+    except: pass
+    return ""
+
+def extract_contact(name, ref_info, contact_web):
+    """Claude로 공개된 연락처 정보 추출"""
+    prompt = f"""강사 {name}의 공개된 연락처 정보를 아래 검색 결과에서 추출하세요.
+
+[경력/이력 정보]
+{ref_info[:300]}
+
+[연락처 관련 검색 결과]
+{contact_web[:400] if contact_web else "검색 결과 없음"}
+
+반드시 공개된 정보만 추출하세요. 없는 항목은 빈 문자열로.
+JSON으로만 응답:
+{{"email":"공개 이메일(없으면 빈값)","phone":"전화번호(없으면 빈값)","agency":"강연 에이전시 또는 소속기관 섭외 연락처","website":"공식 웹사이트 또는 SNS URL"}}"""
+    try:
+        r = claude_call("claude-opus-4-5", 200,
+            [{"role":"user","content":prompt}])
+        m = re.search(r'\{.*\}', r.content[0].text, re.DOTALL)
+        if m:
+            return json.loads(m.group())
+    except: pass
+    return {"email":"", "phone":"", "agency":"", "website":""}
+
+def format_contact(contact_data):
+    """연락처 dict → 표시용 문자열"""
+    parts = []
+    if contact_data.get("email"):   parts.append(f"✉ {contact_data['email']}")
+    if contact_data.get("phone"):   parts.append(f"📞 {contact_data['phone']}")
+    if contact_data.get("agency"):  parts.append(f"🏢 {contact_data['agency']}")
+    if contact_data.get("website"): parts.append(f"🌐 {contact_data['website']}")
+    return "\n".join(parts) if parts else ""
+
 def verify(name, specialty, affiliation, topic, levels, audience, ref_info, yt_list):
     """
     적합성 검증 로직 (총 100점)
@@ -283,7 +328,7 @@ JSON으로만:
 
 def notion_save(name, specialty, affiliation, level, topic, audience,
                 yt_score, ref_score, fit_score, target_score, total,
-                verdict, ref_summary, verdict_reason, yt_list, fee_range=""):
+                verdict, ref_summary, verdict_reason, yt_list, fee_range="", contact=""):
     yt_text = "\n".join(x["url"] for x in yt_list)
     # 교육대상 선택값을 Notion SELECT 옵션값에 맞게 변환
     audience_map = {
@@ -330,6 +375,7 @@ def notion_save(name, specialty, affiliation, level, topic, audience,
                 "레퍼런스요약":{"rich_text": [{"text":{"content":ref_summary[:2000]}}]},
                 "판정근거":    {"rich_text": [{"text":{"content":verdict_reason[:500]}}]},
                 **({"예상단가": {"rich_text": [{"text":{"content":fee_range}}]}} if fee_range else {}),
+                **({"연락처":   {"rich_text": [{"text":{"content":contact[:500]}}]}} if contact else {}),
             }}, timeout=10)
         return r.status_code == 200
     except: return False
@@ -679,6 +725,12 @@ def step3():
         fee_range = fee_data.get("fee_range", c.get("fee_range","추정 불가"))
         fee_basis = fee_data.get("fee_basis","")
 
+        # 연락처: 웹 서칭 + Claude 추출
+        status.info(f"검증 중 ({i+1}/{total_n}): **{name}** — 연락처 수집 중...")
+        contact_web  = tavily_contact(name)
+        contact_data = extract_contact(name, ref, contact_web)
+        contact_str  = format_contact(contact_data)
+
         DB.execute("""INSERT INTO verifications
             (topic,levels,audience,name,specialty,affiliation,
              yt_score,ref_score,fit_score,target_score,total_score,verdict,
@@ -694,7 +746,8 @@ def step3():
              datetime.now().isoformat()))
         DB.commit()
         results.append({**c, **score, "yt_list": yts,
-                        "fee_range": fee_range, "fee_basis": fee_basis})
+                        "fee_range": fee_range, "fee_basis": fee_basis,
+                        "contact": contact_data, "contact_str": contact_str})
         prog.progress(int((i+1)/total_n*100))
 
     status.success(f"✅ 검증 완료! {total_n}명 처리")
@@ -768,6 +821,15 @@ def step4():
                 else:
                     st.caption("검색된 영상 없음")
 
+                contact_str = v.get("contact_str", "")
+                if contact_str:
+                    st.divider()
+                    st.markdown("**📬 연락처**")
+                    st.markdown(contact_str)
+                else:
+                    st.divider()
+                    st.caption("📬 공개된 연락처 정보 없음")
+
     # ── Notion 선택 저장 ──────────────────────
     if use_notion and notion_token:
         st.divider()
@@ -798,7 +860,8 @@ def step4():
                             v.get("fit_score",0), v.get("target_score",0),
                             v.get("total",0), v.get("verdict",""),
                             v.get("ref_summary",""), v.get("verdict_reason",""),
-                            v.get("yt_list",[]), v.get("fee_range","")
+                            v.get("yt_list",[]), v.get("fee_range",""),
+                            v.get("contact_str","")
                         )
                         if ok:
                             saved.append(v["name"])
@@ -1009,6 +1072,7 @@ def tab_db_update():
                     if _is_empty_prop(props, "판정","select"):  empty_fields.append("판정")
                     if _is_empty_prop(props, "예상단가"):       empty_fields.append("예상단가")
                     if _is_empty_prop(props, "유튜브URL"):      empty_fields.append("유튜브URL")
+                    if _is_empty_prop(props, "연락처"):         empty_fields.append("연락처")
                     if empty_fields:
                         needs_update.append({
                             "page_id":     p["id"],
@@ -1106,7 +1170,13 @@ def tab_db_update():
             fee_data = estimate_fee(name, specialty, affiliation, level, ref_info, fee_web)
             fee_range = fee_data.get("fee_range", "")
 
-            # 6) Notion에서 교육대상/강사유형 SELECT 값 변환
+            # 6) 연락처 수집
+            status.info(f"({i+1}/{len(pages)}) **{name}** — 연락처 수집 중...")
+            contact_web  = tavily_contact(name)
+            contact_data = extract_contact(name, ref_info, contact_web)
+            contact_str  = format_contact(contact_data)
+
+            # 7) Notion에서 교육대상/강사유형 SELECT 값 변환
             notion_audience = audience_map.get(audience, audience.split("(")[0].strip())
             notion_level    = level_map.get(level, level)
             yt_text         = "\n".join(x["url"] for x in yts)
@@ -1115,7 +1185,7 @@ def tab_db_update():
             ref_summary     = score.get("ref_summary", "")
             verdict_reason  = score.get("verdict_reason", "")
 
-            # 7) Notion PATCH — 비어있는 필드만 업데이트
+            # 8) Notion PATCH — 비어있는 필드만 업데이트
             patch_props = {}
             empty = set(item["empty_fields"])
             if "전문분야"  in empty and specialty:
@@ -1144,6 +1214,8 @@ def tab_db_update():
                 patch_props["판정근거"]   = {"rich_text":[{"text":{"content":verdict_reason[:500]}}]}
             if "예상단가" in empty and fee_range and fee_range != "추정 불가":
                 patch_props["예상단가"]   = {"rich_text":[{"text":{"content":fee_range}}]}
+            if "연락처" in empty and contact_str:
+                patch_props['연락처']     = {'rich_text':[{'text':{'content':contact_str[:500]}}]}
 
             if patch_props:
                 try:
@@ -1162,7 +1234,7 @@ def tab_db_update():
             prog.progress(int((i + 1) / len(pages) * 100))
 
         status.success(f"✅ 완료! {success_count}/{len(pages)}건 업데이트")
-        st.session_state.pop("db_update_pages", None)
+        st.session_state.pop('db_update_pages', None)
 
 
 # ─────────────────────────────────────────────
@@ -1190,7 +1262,8 @@ def tab_history():
 
     for topic,name,spec,score,verdict,yt_j,ref_sum,at,nsaved in filtered:
         badge = " 📦" if nsaved else ""
-        with st.expander(f"{verdict}{badge} **{name}** | {topic} | {score}점 | {(at or '')[:10]}"):
+        at_str = (at or '')[:10]
+        with st.expander(f"{verdict}{badge} **{name}** | {topic} | {score}점 | {at_str}"):
             st.caption(f"전문분야: {spec}")
             if ref_sum: st.write(ref_sum)
             try:
