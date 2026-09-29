@@ -14,6 +14,7 @@
 |---|---|
 | **파일 더블클릭** | `index.html`(교육생) / `admin.html`(강사) 을 Chrome·Edge 로 엽니다. 서버·설치·인터넷이 필요 없습니다. |
 | **사내 웹 배포** | `factory-decision-lab/` 폴더를 그대로 사내 웹서버 또는 GitHub Pages 에 올립니다. |
+| **단일 파일 배포** | `dist/index.html`, `dist/admin.html` 은 CSS·JS 가 포함된 단일 파일입니다. 메일·메신저로 파일 하나만 전달해도 실행됩니다. 소스 수정 후 `python3 tools/build_single.py` 로 다시 생성합니다. |
 | **시연용 빠른 진행** | `index.html?speed=10` → 10배속 (45분 Case 를 4.5분에) |
 
 - 외부 라이브러리/CDN 을 사용하지 않아 **폐쇄망 제조현장 PC 에서도 동작**합니다.

@@ -272,18 +272,23 @@
     if (ad) ad.onclick = function () { cfg.timeLimitMin = FDL.DIFFICULTY[cfg.difficulty].timeLimitMin; setDirty(true); render(); };
     var s2 = $('#saveBtn2'); if (s2) s2.onclick = save;
     var rb = $('#resetBtn');
-    if (rb) rb.onclick = function () { if (!confirm('모든 설정을 기본값으로 초기화하시겠습니까?')) return; cfg = FDL.clone(FDL.DEFAULT_CONFIG); try { localStorage.removeItem('fdl.config'); } catch (e) {} saved = null; setDirty(false); render(); };
+    if (rb) rb.onclick = function () { FDL.confirmBox('모든 설정을 기본값으로 초기화하시겠습니까?', function () { cfg = FDL.clone(FDL.DEFAULT_CONFIG); try { localStorage.removeItem('fdl.config'); } catch (e) {} saved = null; setDirty(false); render(); }, '초기화'); };
     var cl = $('#copyLink');
     if (cl) cl.onclick = function () {
       var txt = $('#linkBox').textContent;
-      (navigator.clipboard ? navigator.clipboard.writeText(txt) : Promise.reject()).then(function () { flash('링크를 복사했습니다.'); }, function () { window.prompt('아래 링크를 복사하십시오.', txt); });
+      FDL.copyText(txt, function (ok) {
+        if (ok) { flash('링크를 복사했습니다.'); return; }
+        var r = document.createRange(); r.selectNodeContents($('#linkBox'));
+        var sl = window.getSelection(); sl.removeAllRanges(); sl.addRange(r);
+        flash('링크를 선택했습니다. Ctrl+C 로 복사하십시오.');
+      });
     };
     var ec = $('#expCfg');
-    if (ec) ec.onclick = function () { download(cfg, 'FDL_config_' + (cfg.caseId || 'custom') + '.json'); };
+    if (ec) ec.onclick = function () { FDL.saveJson(cfg, 'FDL_config_' + (cfg.caseId || 'custom') + '.json'); };
     var ic = $('#impCfg');
     if (ic) ic.onchange = function () {
       readFiles(ic.files, function (objs) {
-        if (!objs[0] || !objs[0].rootCause) { alert('올바른 설정 파일이 아닙니다.'); return; }
+        if (!objs[0] || !objs[0].rootCause) { FDL.alertBox('올바른 설정 파일이 아닙니다.'); return; }
         cfg = FDL.deepMerge(FDL.clone(FDL.DEFAULT_CONFIG), objs[0]); setDirty(true); render(); flash('설정을 불러왔습니다. 저장을 눌러 적용하십시오.');
       });
     };
@@ -296,7 +301,7 @@
       });
     };
     var cr = $('#clearRes');
-    if (cr) cr.onclick = function () { if (!confirm('이 브라우저에 저장된 교육생 결과를 모두 삭제하시겠습니까?')) return; FDL.store.set('fdl.results', []); render(); };
+    if (cr) cr.onclick = function () { FDL.confirmBox('이 브라우저에 저장된 교육생 결과를 모두 삭제하시겠습니까?', function () { FDL.store.set('fdl.results', []); render(); }, '삭제'); };
     $$('#adminView [data-sel]').forEach(function (cb) {
       cb.onchange = function () {
         var id = cb.getAttribute('data-sel');
@@ -311,15 +316,9 @@
     if (!left) return;
     arr.forEach(function (f) {
       var r = new FileReader();
-      r.onload = function () { try { out.push(JSON.parse(r.result)); } catch (e) { alert(f.name + ': JSON 파싱 실패'); } if (--left === 0) cb(out); };
+      r.onload = function () { try { out.push(JSON.parse(r.result)); } catch (e) { FDL.alertBox(f.name + ': JSON 파일을 읽을 수 없습니다.'); } if (--left === 0) cb(out); };
       r.readAsText(f);
     });
-  }
-  function download(obj, name) {
-    var a = document.createElement('a');
-    a.href = URL.createObjectURL(new Blob([JSON.stringify(obj, null, 1)], { type: 'application/json' }));
-    a.download = name; document.body.appendChild(a); a.click();
-    setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 500);
   }
   function flash(msg) {
     var t = document.createElement('div'); t.className = 'toast'; t.textContent = msg; t.style.bottom = '24px';

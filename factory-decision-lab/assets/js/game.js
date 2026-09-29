@@ -826,10 +826,13 @@
     $$('#hypList [data-del]').forEach(function (el) {
       el.onclick = function () {
         var i = +el.getAttribute('data-del'), h = G.hypotheses[i];
-        if (!confirm('가설 “' + h.title + '” 을 삭제하시겠습니까? (기각 처리를 권장합니다)')) return;
-        G.hypotheses.splice(i, 1);
-        log('hyp_update', '가설 삭제: ' + h.title);
-        renderHyps();
+        FDL.confirmBox('가설 “' + h.title + '” 을 삭제하시겠습니까?\n(판단 과정 기록을 위해 “기각” 처리를 권장합니다)', function () {
+          var k = G.hypotheses.indexOf(h);
+          if (k < 0) return;
+          G.hypotheses.splice(k, 1);
+          log('hyp_update', '가설 삭제: ' + h.title);
+          renderHyps();
+        }, '삭제');
       };
     });
   }
@@ -993,7 +996,14 @@
 
   function openFinal(forced) {
     if (G.phase === 'result') return;
-    if (!forced && !confirm('FINAL DECISION 을 작성하시겠습니까?\n(작성 중에도 시간은 흐릅니다. 제출하면 시뮬레이션이 종료됩니다.)')) return;
+    if (!forced) {
+      FDL.confirmBox('FINAL DECISION 을 작성하시겠습니까?\n(작성 중에도 시간은 흐릅니다. 제출하면 시뮬레이션이 종료됩니다.)', function () { if (G.phase === 'running') showFinal(false); }, '작성 시작');
+      return;
+    }
+    showFinal(true);
+  }
+
+  function showFinal(forced) {
     G.phase = 'final';
     log('system', forced ? 'Final Decision (시간 종료)' : 'Final Decision 작성 시작');
     var eqOpts = '<select id="fRcEq"><option value="">설비 선택</option>' + FDL.EQUIPMENT.map(function (id) { return '<option>' + id + '</option>'; }).join('') + '</select>';
@@ -1038,8 +1048,15 @@
     if (rcSel.some(function (x) { return (x.i === 1 || x.i === 2) && !x.eq; })) { toast('설비 관련 원인의 대상 설비를 선택하십시오.'); return; }
     if (!checks.length && !f.rootCauseText) { toast('Root Cause 를 선택하거나 서술하십시오.'); return; }
     var empty = ['immediate', 'production', 'collaboration', 'customer', 'prevention'].filter(function (k) { return !f[k]; });
-    if (empty.length && !confirm('비어 있는 항목이 ' + empty.length + '개 있습니다. 그대로 제출하시겠습니까?')) return;
-    // Root Cause 의 설비 선택은 체크 항목 텍스트에 포함되어 분류됨
+    if (empty.length) {
+      FDL.confirmBox('비어 있는 항목이 ' + empty.length + '개 있습니다. 그대로 제출하시겠습니까?', function () { finishWith(f); }, '제출');
+      return;
+    }
+    finishWith(f);
+  }
+
+  function finishWith(f) {
+    if (G.phase === 'result') return;
     G.final = f;
     log('final', 'Final Decision 제출', f);
     G.phase = 'result';
@@ -1117,8 +1134,9 @@
     $('#fullpage').scrollTop = 0;
     renderTimeline(false);
     $('#tlAll').onchange = function () { renderTimeline(this.checked); };
-    $('#rJson').onclick = function () { downloadJson(resultPayload(), 'FDL_' + G.team.replace(/[^\w가-힣-]+/g, '_') + '_' + new Date().toISOString().slice(0, 16).replace(/[:T]/g, '') + '.json'); };
-    $('#rPrint').onclick = function () { window.print(); };
+    $('#rJson').onclick = function () { FDL.saveJson(resultPayload(), 'FDL_' + G.team.replace(/[^\w가-힣-]+/g, '_') + '_' + new Date().toISOString().slice(0, 16).replace(/[:T]/g, '') + '.json'); };
+    if (window.FDL_EMBED) $('#rPrint').remove();
+    else $('#rPrint').onclick = function () { window.print(); };
     $('#rAgain').onclick = function () { location.reload(); };
   }
 
@@ -1129,14 +1147,6 @@
   }
 
   function renderTimeline(all) { $('#tl').innerHTML = FDL.timelineHtml(G.log, all); }
-
-  function downloadJson(obj, name) {
-    var blob = new Blob([JSON.stringify(obj, null, 1)], { type: 'application/json' });
-    var a = document.createElement('a');
-    a.href = URL.createObjectURL(blob); a.download = name;
-    document.body.appendChild(a); a.click();
-    setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 500);
-  }
 
   /* ---------------- 바인딩 ---------------- */
   function bindShell() {

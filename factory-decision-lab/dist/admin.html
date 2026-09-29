@@ -1,0 +1,2221 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>FDL Instructor Mode</title>
+  <style>
+/* ==========================================================================
+   FACTORY DECISION LAB — Control Room Dashboard (dark industrial)
+   ========================================================================== */
+:root {
+  color-scheme: dark;
+  --bg: #0b0f14;
+  --panel: #121820;
+  --panel-2: #151b23;
+  --panel-3: #1b232e;
+  --line: #243040;
+  --line-2: #2f3d50;
+  --text: #dbe3ec;
+  --text-2: #a4b1c0;
+  --muted: #718096;
+  --accent: #3a9bdc;
+  --accent-2: #1f6fa8;
+  --good: #0ca30c;
+  --good-t: #4cc74c;
+  --warn: #fab219;
+  --serious: #ec835a;
+  --crit: #d03b3b;
+  --crit-t: #ff6b6b;
+  --focus: #6cb6ff;
+  --radius: 8px;
+  --mono: "JetBrains Mono", "D2Coding", Consolas, "SFMono-Regular", Menlo, monospace;
+  --sans: "Pretendard", "Noto Sans KR", "Malgun Gothic", "Apple SD Gothic Neo", system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0; background: var(--bg); color: var(--text);
+  font-family: var(--sans); font-size: 14px; line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+button, input, select, textarea { font: inherit; color: inherit; }
+a { color: var(--focus); }
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.muted { color: var(--muted); }
+.mono { font-family: var(--mono); }
+.hidden { display: none !important; }
+
+/* ---------- Buttons ---------- */
+.btn { text-decoration: none;
+  display: inline-flex; align-items: center; gap: 6px; justify-content: center;
+  border: 1px solid var(--line-2); background: var(--panel-3); color: var(--text);
+  padding: 7px 14px; border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 13px;
+  transition: background .15s, border-color .15s;
+}
+.btn:hover { background: #223043; border-color: #3b4d63; }
+.btn:disabled { opacity: .45; cursor: not-allowed; }
+.btn.primary { background: var(--accent-2); border-color: var(--accent); color: #fff; }
+.btn.primary:hover { background: #2780c0; }
+.btn.danger { background: #5a1d1d; border-color: var(--crit); color: #fff; }
+.btn.warn { background: #4d3808; border-color: var(--warn); color: #ffe3a3; }
+.btn.ghost { background: transparent; }
+.btn.sm { padding: 4px 10px; font-size: 12px; }
+.btn.lg { padding: 12px 28px; font-size: 15px; letter-spacing: .04em; }
+
+/* ---------- Shell ---------- */
+.shell { display: grid; grid-template-rows: auto auto 1fr auto; height: 100vh; overflow: hidden; }
+.topbar {
+  display: flex; align-items: center; gap: 16px; padding: 8px 16px;
+  background: #0e141b; border-bottom: 1px solid var(--line);
+}
+.brand { display: flex; align-items: center; gap: 10px; font-weight: 800; letter-spacing: .08em; font-size: 15px; white-space: nowrap; }
+.brand .logo { width: 26px; height: 26px; border-radius: 6px; background: linear-gradient(135deg, #1f6fa8, #0f3b5e); display: grid; place-items: center; font-size: 13px; }
+.case-name { color: var(--text-2); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; flex: 1; }
+.case-name b { color: var(--text); font-weight: 600; }
+.clockbox { display: flex; gap: 14px; align-items: center; }
+.clock-item { text-align: right; }
+.clock-item .lbl { font-size: 10px; color: var(--muted); letter-spacing: .1em; text-transform: uppercase; }
+.clock-item .val { font-family: var(--mono); font-size: 20px; font-weight: 700; line-height: 1.1; }
+.clock-item.remaining .val { color: #ffd479; }
+.clock-item.remaining.low .val { color: var(--crit-t); animation: blink 1s steps(2) infinite; }
+@keyframes blink { 50% { opacity: .45; } }
+
+/* ---------- KPI bar ---------- */
+.kpibar { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px; padding: 8px 16px; background: #0d1218; border-bottom: 1px solid var(--line); }
+.kpi {
+  background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 8px 12px; position: relative; overflow: hidden; min-width: 0;
+}
+.kpi::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--good); }
+.kpi.warn::before { background: var(--warn); }
+.kpi.crit::before { background: var(--crit); }
+.kpi.crit { border-color: #6b2525; background: #1a1215; }
+.kpi .k-top { display: flex; justify-content: space-between; align-items: center; gap: 4px; }
+.kpi .k-name { font-size: 11px; color: var(--text-2); letter-spacing: .04em; white-space: nowrap; }
+.kpi .k-flag { font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 3px; display: none; white-space: nowrap; }
+.kpi.warn .k-flag { display: inline-block; background: #3d2e08; color: var(--warn); }
+.kpi.crit .k-flag { display: inline-block; background: #4a1414; color: #ff8a8a; }
+.kpi .k-row { display: flex; align-items: flex-end; justify-content: space-between; gap: 6px; }
+.kpi .k-val { font-family: var(--mono); font-size: 24px; font-weight: 700; line-height: 1.2; white-space: nowrap; }
+.kpi .k-val small { font-size: 13px; color: var(--text-2); margin-left: 2px; }
+.kpi .k-delta { font-size: 12px; font-weight: 700; font-family: var(--mono); }
+.kpi .k-delta.bad { color: var(--crit-t); }
+.kpi .k-delta.good { color: var(--good-t); }
+.kpi .spark { width: 90px; height: 26px; flex-shrink: 0; }
+.kpi .spark path { fill: none; stroke-width: 1.5; }
+.lvl { font-family: var(--mono); font-weight: 700; }
+.lvl.LOW { color: var(--good-t); }
+.lvl.MEDIUM { color: var(--warn); }
+.lvl.HIGH { color: var(--serious); }
+.lvl.CRITICAL { color: var(--crit-t); }
+
+/* ---------- Main 3-col ---------- */
+.main { display: grid; grid-template-columns: 172px minmax(0, 1fr) 380px; min-height: 0; }
+.sidenav { background: #0e141b; border-right: 1px solid var(--line); padding: 10px 8px; overflow-y: auto; }
+.sidenav .nav-title { font-size: 10px; color: var(--muted); letter-spacing: .12em; padding: 6px 10px; }
+.sidenav button {
+  display: flex; align-items: center; gap: 10px; width: 100%; background: none; border: 0;
+  padding: 9px 10px; border-radius: 6px; cursor: pointer; color: var(--text-2); text-align: left; font-weight: 500;
+}
+.sidenav button:hover { background: var(--panel-3); color: var(--text); }
+.sidenav button.active { background: #17324a; color: #fff; box-shadow: inset 3px 0 0 var(--accent); }
+.sidenav .ico { width: 18px; text-align: center; font-size: 15px; }
+.sidenav .dot { margin-left: auto; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
+
+.content { overflow-y: auto; padding: 14px 16px 24px; min-width: 0; }
+.view-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; }
+.view-head h2 { margin: 0; font-size: 17px; letter-spacing: .02em; }
+.view-head .sub { color: var(--muted); font-size: 12px; }
+
+.grid { display: grid; gap: 12px; }
+.grid.c2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.grid.c3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 14px; min-width: 0; }
+.card h3 { margin: 0 0 8px; font-size: 13px; color: var(--text-2); font-weight: 600; letter-spacing: .03em; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.card h3 .tag { font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 3px; background: var(--panel-3); color: var(--muted); }
+.card .note { font-size: 12px; color: var(--muted); margin-top: 6px; }
+.lock-card { text-align: center; padding: 26px 14px; color: var(--muted); border-style: dashed; }
+.lock-card .l-ico { font-size: 22px; }
+
+/* ---------- Charts ---------- */
+.chart { width: 100%; height: auto; display: block; }
+.chart .grid, .chart .grid-poly { stroke: #223041; stroke-width: 1; fill: none; }
+.chart .axis { fill: var(--muted); font-size: 11px; font-family: var(--mono); }
+.chart .axis.lbl { fill: var(--text-2); font-family: var(--sans); font-size: 12px; }
+.chart .val { fill: var(--text); font-size: 11px; font-family: var(--mono); font-weight: 600; }
+.chart .series { fill: none; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.chart .ref { stroke: #5a6b80; stroke-dasharray: 4 4; }
+.chart .marker { stroke: #8a6d1f; stroke-dasharray: 2 3; }
+.chart .marker-label { fill: #d8b25a; font-size: 10px; }
+.chart .live-zone { fill: #3a9bdc; opacity: .06; }
+.chart .live-label { fill: var(--accent); font-weight: 700; }
+.chart .ring { stroke: var(--panel); stroke-width: 2; }
+.chart .hover-col { fill: transparent; cursor: crosshair; }
+.chart .hover-col:hover { fill: rgba(255, 255, 255, .04); }
+.chart .bar.muted { opacity: .55; }
+.legend { display: flex; flex-wrap: wrap; gap: 12px; font-size: 12px; color: var(--text-2); margin-top: 6px; }
+.legend i, #fdl-tip i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
+#fdl-tip {
+  position: fixed; z-index: 999; pointer-events: none; display: none;
+  background: #0a0e13; border: 1px solid var(--line-2); border-radius: 6px; padding: 8px 10px;
+  font-size: 12px; line-height: 1.6; box-shadow: 0 6px 20px rgba(0, 0, 0, .5); max-width: 280px;
+}
+
+/* ---------- Sub tabs ---------- */
+.subtabs { display: flex; gap: 2px; border-bottom: 1px solid var(--line); margin-bottom: 12px; overflow-x: auto; }
+.subtabs button { background: none; border: 0; border-bottom: 2px solid transparent; padding: 8px 12px; color: var(--text-2); cursor: pointer; font-weight: 600; white-space: nowrap; }
+.subtabs button:hover { color: var(--text); }
+.subtabs button.active { color: #fff; border-bottom-color: var(--accent); }
+
+/* ---------- Tables ---------- */
+table.data { width: 100%; border-collapse: collapse; font-size: 13px; }
+table.data th { text-align: left; font-weight: 600; color: var(--muted); font-size: 11px; letter-spacing: .04em; padding: 6px 8px; border-bottom: 1px solid var(--line-2); white-space: nowrap; }
+table.data td { padding: 7px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+table.data td.num { font-family: var(--mono); text-align: right; white-space: nowrap; }
+table.data th.num { text-align: right; }
+table.data tr.click { cursor: pointer; }
+table.data tr.click:hover td { background: #172130; }
+table.data .hi { color: var(--crit-t); font-weight: 700; }
+.table-wrap { overflow-x: auto; }
+.badge { display: inline-block; font-size: 11px; font-weight: 700; padding: 1px 7px; border-radius: 3px; font-family: var(--mono); white-space: nowrap; }
+.badge.RUN { background: #0f2e14; color: var(--good-t); }
+.badge.STOP { background: #3a1616; color: #ff8a8a; }
+.badge.INSPECT, .badge.SETUP { background: #3a2c08; color: var(--warn); }
+.badge.cat { background: var(--panel-3); color: var(--text-2); font-family: var(--sans); }
+
+/* ---------- Factory map ---------- */
+.fmap { display: flex; align-items: stretch; gap: 0; overflow-x: auto; padding: 4px 2px 8px; }
+.fnode {
+  flex: 1 1 0; min-width: 118px; background: var(--panel-2); border: 1px solid var(--line-2); border-radius: 8px;
+  padding: 10px 10px; cursor: pointer; text-align: left; transition: border-color .15s, background .15s; position: relative;
+}
+.fnode:hover { border-color: var(--accent); background: #16222f; }
+.fnode.sel { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+.fnode .fn-step { font-size: 10px; color: var(--muted); letter-spacing: .1em; }
+.fnode .fn-name { font-weight: 700; font-size: 13px; margin: 2px 0 6px; }
+.fnode .fn-eq { display: flex; flex-wrap: wrap; gap: 3px; margin-bottom: 6px; }
+.fnode .fn-eq span { font-size: 10px; font-family: var(--mono); padding: 1px 4px; border-radius: 3px; background: #0f2e14; color: var(--good-t); }
+.fnode .fn-eq span.STOP { background: #3a1616; color: #ff8a8a; }
+.fnode .fn-eq span.INSPECT, .fnode .fn-eq span.SETUP { background: #3a2c08; color: var(--warn); }
+.fnode .fn-metric { font-size: 11px; color: var(--text-2); display: flex; justify-content: space-between; font-family: var(--mono); }
+.fnode .fn-alert { position: absolute; top: 8px; right: 8px; font-size: 10px; font-weight: 700; color: var(--warn); }
+.farrow { display: grid; place-items: center; width: 22px; color: #4a5d75; flex-shrink: 0; font-size: 16px; }
+
+/* ---------- Right panel ---------- */
+.rightpanel { background: #0e141b; border-left: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0; }
+.rp-tabs { display: flex; border-bottom: 1px solid var(--line); }
+.rp-tabs button { flex: 1; background: none; border: 0; padding: 11px 8px; cursor: pointer; color: var(--text-2); font-weight: 600; font-size: 13px; border-bottom: 2px solid transparent; }
+.rp-tabs button.active { color: #fff; border-bottom-color: var(--accent); }
+.rp-tabs .cnt { font-family: var(--mono); font-size: 11px; background: var(--panel-3); border-radius: 8px; padding: 0 6px; margin-left: 4px; }
+.rp-body { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.chat { flex: 1; overflow-y: auto; padding: 12px; display: flex; flex-direction: column; gap: 10px; }
+.msg { max-width: 94%; padding: 9px 12px; border-radius: 8px; font-size: 13px; line-height: 1.55; }
+.msg p { margin: 0 0 6px; } .msg p:last-child { margin-bottom: 0; }
+.msg.user { align-self: flex-end; background: #17324a; border: 1px solid #22486a; }
+.msg.ai { align-self: flex-start; background: var(--panel); border: 1px solid var(--line); }
+.msg.ai .who { font-size: 10px; color: var(--accent); font-weight: 700; letter-spacing: .1em; margin-bottom: 4px; }
+.msg .hint { color: #d8c07a; font-size: 12px; }
+.msg .hi { color: var(--crit-t); font-weight: 700; }
+.msg ul.tight { margin: 4px 0; padding-left: 18px; }
+table.mini { border-collapse: collapse; font-size: 12px; margin: 6px 0; width: 100%; }
+table.mini th, table.mini td { border-bottom: 1px solid var(--line); padding: 3px 6px; text-align: left; }
+table.mini th { color: var(--muted); font-weight: 600; }
+.chat-input { border-top: 1px solid var(--line); padding: 10px; display: flex; flex-direction: column; gap: 8px; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { font-size: 11px; background: var(--panel-3); border: 1px solid var(--line-2); border-radius: 12px; padding: 3px 9px; cursor: pointer; color: var(--text-2); }
+.chip:hover { color: #fff; border-color: var(--accent); }
+.chip.on { background: #17324a; border-color: var(--accent); color: #fff; }
+.chat-input form { display: flex; gap: 6px; }
+.chat-input input { flex: 1; min-width: 0; background: var(--panel); border: 1px solid var(--line-2); border-radius: 6px; padding: 8px 10px; }
+.typing { color: var(--muted); font-size: 12px; font-style: italic; }
+
+/* Hypothesis */
+.hyp-wrap { flex: 1; overflow-y: auto; padding: 12px; display: flex; flex-direction: column; gap: 10px; }
+.hyp { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
+.hyp.st-유력 { border-color: #7a5b12; }
+.hyp.st-기각 { opacity: .6; }
+.hyp .h-top { display: flex; align-items: center; gap: 8px; justify-content: space-between; }
+.hyp .h-title { font-weight: 700; }
+.hyp .h-meta { display: flex; gap: 6px; margin: 8px 0 6px; flex-wrap: wrap; }
+.hyp select { background: var(--panel-3); border: 1px solid var(--line-2); border-radius: 4px; padding: 2px 6px; font-size: 12px; }
+.hyp textarea { width: 100%; min-height: 44px; }
+.hyp .h-x { background: none; border: 0; color: var(--muted); cursor: pointer; font-size: 14px; }
+.like-HIGH { color: var(--crit-t); } .like-MEDIUM { color: var(--warn); } .like-LOW { color: var(--text-2); }
+.field { display: flex; flex-direction: column; gap: 4px; }
+.field label, .flabel { font-size: 12px; color: var(--text-2); font-weight: 600; }
+input[type=text], input[type=number], textarea, select {
+  background: var(--panel-2); border: 1px solid var(--line-2); border-radius: 6px; padding: 7px 9px; color: var(--text);
+}
+textarea { resize: vertical; min-height: 60px; line-height: 1.5; }
+.row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+
+/* ---------- Bottom bar ---------- */
+.bottombar { display: flex; align-items: center; gap: 12px; padding: 8px 16px; background: #0e141b; border-top: 1px solid var(--line); }
+.ticker { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--text-2); overflow: hidden; }
+.ticker .t-time { font-family: var(--mono); color: var(--muted); }
+.ticker .t-msg { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.decision-btn { background: linear-gradient(180deg, #d9822b, #b5621a); border: 1px solid #f0a050; color: #fff; font-weight: 800; letter-spacing: .14em; padding: 11px 34px; border-radius: 6px; cursor: pointer; font-size: 15px; }
+.decision-btn:hover { filter: brightness(1.1); }
+.panel-toggle { display: none; }
+
+/* ---------- Drawer (process side panel) ---------- */
+.drawer {
+  position: fixed; top: 0; right: 0; bottom: 0; width: min(460px, 100vw); background: #0f151c; border-left: 1px solid var(--line-2);
+  transform: translateX(100%); transition: transform .22s ease; z-index: 50; display: flex; flex-direction: column; box-shadow: -10px 0 30px rgba(0, 0, 0, .45);
+}
+.drawer.open { transform: none; }
+.drawer .d-head { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px; border-bottom: 1px solid var(--line); }
+.drawer .d-head h3 { margin: 0; font-size: 16px; }
+.drawer .d-body { flex: 1; overflow-y: auto; padding: 14px 16px; display: flex; flex-direction: column; gap: 12px; }
+.kv { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.kv div { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 7px 10px; }
+.kv .k { font-size: 11px; color: var(--muted); }
+.kv .v { font-family: var(--mono); font-weight: 700; font-size: 15px; }
+.sect-title { font-size: 11px; color: var(--muted); letter-spacing: .1em; text-transform: uppercase; margin: 4px 0 -4px; }
+ul.plain { margin: 0; padding: 0; list-style: none; }
+ul.plain li { padding: 6px 0; border-bottom: 1px solid var(--line); font-size: 13px; }
+ul.plain li .when { font-family: var(--mono); color: var(--muted); font-size: 12px; margin-right: 8px; }
+
+/* ---------- Modals ---------- */
+.modal-bg { position: fixed; inset: 0; background: rgba(3, 6, 10, .72); z-index: 80; display: grid; place-items: center; padding: 16px; }
+.modal { background: #111820; border: 1px solid var(--line-2); border-radius: 10px; width: min(640px, 100%); max-height: calc(100vh - 32px); display: flex; flex-direction: column; box-shadow: 0 20px 60px rgba(0, 0, 0, .6); }
+.modal.wide { width: min(920px, 100%); }
+.modal .m-head { padding: 14px 18px; border-bottom: 1px solid var(--line); display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.modal .m-head h3 { margin: 0; font-size: 16px; letter-spacing: .02em; }
+.modal .m-body { padding: 16px 18px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; }
+.modal .m-foot { padding: 12px 18px; border-top: 1px solid var(--line); display: flex; justify-content: flex-end; gap: 8px; align-items: center; }
+.alert-modal { border-width: 2px; }
+.alert-modal .m-head { background: #1d1410; }
+.alert-modal.QUALITY { border-color: var(--crit); } .alert-modal.QUALITY .m-head h3 { color: #ff8a8a; }
+.alert-modal.PRODUCTION { border-color: var(--warn); } .alert-modal.PRODUCTION .m-head h3 { color: var(--warn); }
+.alert-modal.CUSTOMER { border-color: var(--serious); } .alert-modal.CUSTOMER .m-head h3 { color: var(--serious); }
+.alert-modal.MATERIAL, .alert-modal.EQUIPMENT, .alert-modal.INFO { border-color: var(--accent); } .alert-modal.MATERIAL .m-head h3, .alert-modal.EQUIPMENT .m-head h3 { color: #8fcaf5; }
+.alert-modal .m-head { animation: flash 1.2s ease 2; }
+@keyframes flash { 50% { background: #3a1a12; } }
+.alert-time { font-family: var(--mono); color: var(--muted); font-size: 12px; }
+.alert-body p { margin: 0 0 8px; font-size: 15px; line-height: 1.6; }
+.action-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+.action-item { display: flex; gap: 10px; padding: 9px 10px; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; cursor: pointer; align-items: flex-start; }
+.action-item:hover { border-color: var(--line-2); }
+.action-item.on { border-color: var(--accent); background: #14263a; }
+.action-item input[type=checkbox] { margin-top: 3px; accent-color: var(--accent); }
+.action-item .a-label { font-weight: 700; font-size: 13px; }
+.action-item .a-desc { font-size: 11px; color: var(--muted); line-height: 1.4; }
+.action-item select { margin-top: 6px; font-size: 12px; padding: 3px 6px; }
+.group-title { font-size: 11px; color: var(--muted); letter-spacing: .1em; margin-top: 4px; }
+.req { color: var(--crit-t); }
+.diff-table td.arrow { color: var(--muted); text-align: center; }
+.diff-table td.better { color: var(--good-t); font-weight: 700; }
+.diff-table td.worse { color: var(--crit-t); font-weight: 700; }
+
+/* ---------- Brief / Final / Result ---------- */
+.fullpage { position: fixed; inset: 0; overflow-y: auto; background: radial-gradient(1200px 600px at 70% -10%, #13263a 0%, var(--bg) 60%); z-index: 70; }
+.fp-inner { max-width: 1080px; margin: 0 auto; padding: 32px 20px 60px; }
+.brief-hero { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); gap: 20px; align-items: start; }
+.brief-hero h1 { font-size: 34px; letter-spacing: .1em; margin: 6px 0 10px; }
+.brief-hero .role { font-size: 20px; line-height: 1.5; margin: 0 0 14px; }
+.eyebrow { font-size: 11px; letter-spacing: .2em; color: var(--accent); font-weight: 700; }
+.cycle { display: flex; flex-wrap: wrap; gap: 6px; margin: 14px 0; }
+.cycle span { font-size: 11px; font-weight: 700; letter-spacing: .08em; padding: 4px 9px; border: 1px solid var(--line-2); border-radius: 4px; color: var(--text-2); background: var(--panel); }
+.rules li { margin-bottom: 6px; color: var(--text-2); }
+.final-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.final-grid .full { grid-column: 1 / -1; }
+.check-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px 12px; }
+.check-grid label { display: flex; gap: 8px; align-items: center; font-size: 13px; padding: 4px 0; cursor: pointer; }
+.check-grid input { accent-color: var(--accent); }
+
+.res-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; flex-wrap: wrap; margin-bottom: 16px; }
+.res-head h1 { margin: 4px 0; font-size: 26px; letter-spacing: .06em; }
+.domain-cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.dcard { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; }
+.dcard .d-top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.dcard .d-name { font-weight: 700; }
+.dcard .d-ko { color: var(--muted); font-size: 12px; margin-left: 6px; font-weight: 400; }
+.dcard .d-lv { font-size: 12px; font-weight: 700; padding: 1px 8px; border-radius: 3px; background: var(--panel-3); }
+.meter { height: 6px; background: #1c2633; border-radius: 3px; margin: 8px 0; overflow: hidden; }
+.meter > i { display: block; height: 100%; background: var(--accent); border-radius: 3px; }
+.dcard ul { margin: 6px 0 0; padding-left: 18px; color: var(--text-2); font-size: 13px; }
+.dcard li { margin-bottom: 4px; }
+.timeline { position: relative; }
+.timeline::before { content: ""; position: absolute; left: 61px; top: 4px; bottom: 4px; width: 2px; background: var(--line-2); }
+.tl-item { display: grid; grid-template-columns: 44px 1fr; gap: 32px; padding: 6px 0; position: relative; font-size: 13px; }
+.tl-item .tl-t { font-family: var(--mono); color: var(--text-2); text-align: right; }
+.tl-item::before { content: ""; position: absolute; left: 56px; top: 11px; width: 10px; height: 10px; border-radius: 50%; background: var(--line-2); border: 2px solid var(--panel); box-sizing: content-box; }
+.tl-item.tl-decision::before { background: #d9822b; }
+.tl-item.tl-event::before { background: var(--crit); }
+.tl-item.tl-hyp::before, .tl-item.tl-hyp_update::before { background: #9085e9; }
+.tl-item.tl-kpi::before { background: var(--warn); }
+.tl-item.tl-view::before, .tl-item.tl-query::before { background: var(--accent); }
+.tl-item.tl-system::before, .tl-item.tl-final::before { background: var(--good); }
+.tl-item .tl-type { font-size: 10px; font-weight: 700; letter-spacing: .08em; color: var(--muted); margin-right: 6px; }
+.tl-item .tl-sub { color: var(--muted); font-size: 12px; margin-top: 2px; white-space: pre-wrap; }
+.rc-box { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.rc-item { border: 1px solid var(--line-2); border-radius: 8px; padding: 10px 12px; background: var(--panel-2); }
+.rc-item.hit { border-color: #2c6b2c; }
+.rc-item.miss { border-color: #6b2c2c; }
+.rc-item .rc-st { font-size: 11px; font-weight: 700; }
+.rc-item.hit .rc-st { color: var(--good-t); } .rc-item.miss .rc-st { color: #ff8a8a; }
+.plus { display: grid; place-items: center; color: var(--muted); }
+.debrief-q li { margin-bottom: 8px; color: var(--text-2); }
+.toolbar { display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* ---------- Toast ---------- */
+.toast { position: fixed; left: 50%; bottom: 76px; transform: translateX(-50%); background: #16222f; border: 1px solid var(--accent); padding: 8px 16px; border-radius: 6px; z-index: 120; font-size: 13px; }
+
+/* ---------- Responsive ---------- */
+@media (max-width: 1280px) {
+  .main { grid-template-columns: 150px minmax(0, 1fr) 330px; }
+  .kpi .spark { display: none; }
+}
+@media (max-width: 1100px) {
+  .main { grid-template-columns: 58px minmax(0, 1fr); }
+  .sidenav .nav-label, .sidenav .nav-title, .sidenav .dot { display: none; }
+  .sidenav button { justify-content: center; padding: 10px 0; }
+  .rightpanel { position: fixed; top: 0; right: 0; bottom: 0; width: min(400px, 100vw); z-index: 40; transform: translateX(100%); transition: transform .22s; box-shadow: -10px 0 30px rgba(0, 0, 0, .45); }
+  .rightpanel.open { transform: none; }
+  .panel-toggle { display: inline-flex; }
+  .kpibar { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .grid.c3 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 760px) {
+  body { font-size: 13px; }
+  .topbar { flex-wrap: wrap; gap: 8px 12px; padding: 8px 12px; }
+  .case-name { order: 3; flex-basis: 100%; }
+  .kpibar { padding: 8px 12px; gap: 6px; }
+  .kpi .k-val { font-size: 19px; }
+  .content { padding: 12px; }
+  .grid.c2, .grid.c3, .action-list, .final-grid, .domain-cards, .check-grid, .brief-hero, .rc-box { grid-template-columns: minmax(0, 1fr); }
+  .decision-btn { padding: 10px 18px; }
+  .clock-item .val { font-size: 17px; }
+}
+@media print {
+  .fullpage { position: static; background: #fff; color: #000; }
+  .toolbar, .no-print { display: none !important; }
+}
+
+</style>
+  <style>
+    body { overflow: auto; }
+    .admin { display: grid; grid-template-rows: auto 1fr; min-height: 100vh; }
+    .admin-main { display: grid; grid-template-columns: 210px minmax(0, 1fr); min-height: 0; }
+    .admin .content { padding: 18px 22px 60px; }
+    .form-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+    .form-grid .wide { grid-column: span 2; }
+    .form-grid .full { grid-column: 1 / -1; }
+    .preview { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+    .preview > div { background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; }
+    .preview .k { font-size: 11px; color: var(--muted); }
+    .preview .v { font-family: var(--mono); font-weight: 700; font-size: 16px; }
+    .seg { display: inline-flex; border: 1px solid var(--line-2); border-radius: 6px; overflow: hidden; }
+    .seg button { background: var(--panel-2); border: 0; padding: 4px 10px; cursor: pointer; color: var(--text-2); font-size: 12px; }
+    .seg button.on { background: var(--accent-2); color: #fff; }
+    .compare-cols { display: grid; gap: 12px; grid-auto-flow: column; grid-auto-columns: minmax(280px, 1fr); overflow-x: auto; padding-bottom: 6px; }
+    .compare-cols .card { max-height: 640px; overflow-y: auto; }
+    .team-dot { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; }
+    .link-box { font-family: var(--mono); font-size: 11px; word-break: break-all; background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px; padding: 8px; max-height: 110px; overflow: auto; }
+    .result-row td { vertical-align: middle; }
+    .callout { border-left: 3px solid var(--accent); background: #101c28; padding: 10px 14px; border-radius: 6px; color: var(--text-2); font-size: 13px; }
+    @media (max-width: 1100px) { .admin-main { grid-template-columns: 58px minmax(0, 1fr); } .form-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+    @media (max-width: 760px) { .form-grid, .preview { grid-template-columns: minmax(0, 1fr); } .form-grid .wide { grid-column: auto; } }
+  </style>
+</head>
+<body>
+  <div class="admin">
+    <header class="topbar">
+      <div class="brand"><span class="logo">▣</span>FACTORY DECISION LAB</div>
+      <div class="case-name"><b>INSTRUCTOR MODE</b> · 강사용 Case 설정 및 Debrief</div>
+      <span class="muted" id="saveState" style="font-size:12px"></span>
+      <button class="btn sm" id="saveBtn">이 브라우저에 저장</button>
+      <a class="btn sm primary" href="index.html" target="_blank" rel="noopener">교육생 화면 열기 ↗</a>
+    </header>
+    <div class="admin-main">
+      <nav class="sidenav" id="adminNav"></nav>
+      <main class="content" id="adminView"></main>
+    </div>
+  </div>
+  <div id="modals"></div>
+  <script>
+/* ==========================================================================
+   FACTORY DECISION LAB — Case configuration
+   - 모든 수치/데이터는 이 설정(Hidden Variables)에서 모델로 계산됩니다.
+   - 강사 모드(admin.html)에서 수정 → localStorage 또는 URL(#cfg=)로 배포
+   ========================================================================== */
+window.FDL = window.FDL || {};
+
+FDL.EQUIPMENT = ['EQ-01', 'EQ-02', 'EQ-03', 'EQ-04'];
+
+/* 의사결정 조치 목록 (params 는 강사 모드에서 수정 가능) */
+FDL.ACTIONS = [
+  { id: 'continue', group: 'core', label: '생산 지속', desc: '현 조건 그대로 생산을 유지합니다.', params: {} },
+  { id: 'reduce', group: 'core', label: '생산량 축소', desc: '라인 속도를 낮춰 생산합니다. (Reflow 체류시간 증가)',
+    params: { rate: 0.75, interactionRelief: 0.3 } },
+  { id: 'stop_eq', group: 'core', label: '특정 설비 정지', desc: '선택한 Reflow 설비를 정지하고 물량을 타 설비로 분산합니다.',
+    target: 'eqRunning', params: { shiftGain: 0.08 } },
+  { id: 'stop_all', group: 'core', label: '전체 생산 중단', desc: '라인 전체 생산을 중단합니다.', params: {} },
+  { id: 'quarantine_lot', group: 'core', label: '원자재 Lot 격리', desc: '신규 Solder Paste Lot(SP-0925B)을 격리하고 이전 Lot(SP-0911A)으로 교체합니다. 이전 Lot 재고는 제한적입니다.',
+    params: { stockMin: 28, wipLoss: 3 } },
+  { id: 'full_inspection', group: 'core', label: '전수검사 실시', desc: '최종검사 X-ray/육안 전수검사로 유출을 차단합니다. 검사 병목이 발생합니다.',
+    params: { productionFactor: 0.88, escapeRate: 0.02 } },
+  { id: 'eq_inspection', group: 'core', label: '설비 긴급점검', desc: '선택 설비를 일시 정지하고 Profiler 실측·열전대·레시피를 점검합니다.',
+    target: 'eqAny', params: { durationMin: 10 } },
+  { id: 'recipe_reset', group: 'extra', label: '레시피/공정조건 재설정', desc: '선택 설비의 Reflow 레시피를 표준(최신 Rev.)으로 재로드합니다.',
+    target: 'eqAny', params: { durationMin: 4 } },
+  { id: 'supplier_inquiry', group: 'extra', label: '공급사 긴급 문의', desc: 'Solder Paste 공급사에 Lot 변경점·품질 이력 확인을 요청합니다.',
+    params: { replyMin: 8 } },
+  { id: 'hold_shipment', group: 'extra', label: '의심 Lot 출하 보류', desc: '어제 14:00 이후 생산분 출하를 보류하고 재검 후 출하합니다.',
+    params: { deliveryPenalty: 7, exposureCut: 0.45 } },
+  { id: 'customer_comm', group: 'extra', label: '고객사 선제 커뮤니케이션', desc: '고객 품질팀에 현황·조치계획을 선제 공유합니다.',
+    params: { exposureRelief: 1.0 } },
+  { id: 'overtime', group: 'extra', label: '잔업·특근 편성', desc: '잔업/특근으로 부족 물량 만회 계획을 수립합니다.',
+    params: { deliveryBonus: 9 } },
+  { id: 'restart_eq', group: 'recover', label: '정지 설비 재가동', desc: '정지한 설비를 다시 가동합니다.', target: 'eqStopped', params: {} },
+  { id: 'resume_all', group: 'recover', label: '전체 생산 재개', desc: '중단된 라인 생산을 재개합니다.', params: {} },
+  { id: 'other', group: 'core', label: '기타 (직접 입력)', desc: '위에 없는 조치를 직접 입력합니다.', params: {} }
+];
+
+/* 데이터 모듈 공개 설정 */
+FDL.DATA_MODULES = [
+  { id: 'quality.trend7d', menu: 'Quality', label: '불량 Trend (7일)' },
+  { id: 'quality.hourly', menu: 'Quality', label: '시간대별 불량 추이' },
+  { id: 'quality.pareto', menu: 'Quality', label: '불량 유형 Pareto' },
+  { id: 'quality.strat', menu: 'Quality', label: '층별 분석 (설비/Lot/조/작업자)' },
+  { id: 'quality.cross', menu: 'Quality', label: '교차 분석 (2차원)' },
+  { id: 'equipment.list', menu: 'Equipment', label: '설비 현황' },
+  { id: 'equipment.detail', menu: 'Equipment', label: '설비 상세 (공정조건/알람)' },
+  { id: 'production.plan', menu: 'Production', label: '생산계획/출하' },
+  { id: 'material.lots', menu: 'Material', label: '원자재 Lot 이력' },
+  { id: 'material.coa', menu: 'Material', label: '수입검사 / COA' },
+  { id: 'people.roster', menu: 'People', label: '근무조/작업자' },
+  { id: 'people.worklog', menu: 'People', label: '작업일지 (Changeover 기록)' },
+  { id: 'history.changes', menu: 'History', label: '4M 변경점 이력' },
+  { id: 'history.incidents', menu: 'History', label: '과거 이상 발생 이력' },
+  { id: 'analyst', menu: 'AI', label: 'AI Manufacturing Analyst' }
+];
+
+FDL.DOMAINS = [
+  { id: 'SA', label: 'Situation Awareness', ko: '상황 인지' },
+  { id: 'DA', label: 'Data Analysis', ko: '데이터 분석' },
+  { id: 'HQ', label: 'Hypothesis Quality', ko: '가설 품질' },
+  { id: 'DM', label: 'Decision Making', ko: '의사결정' },
+  { id: 'TM', label: 'Trade-off Management', ko: 'Trade-off 관리' },
+  { id: 'AD', label: 'Adaptability', ko: '적응력' }
+];
+
+/* 시간 이벤트 (T+분) — message 가 비어 있으면 상황에 따라 동적 문구 사용 */
+FDL.DEFAULT_EVENTS = [
+  { id: 'defect_rise', minute: 10, enabled: true, type: 'QUALITY', title: 'QUALITY ALERT — 불량 추가 증가', message: '' },
+  { id: 'plan_request', minute: 20, enabled: true, type: 'PRODUCTION', title: 'PRODUCTION ALERT — 생산계획팀 긴급 요청', message: '' },
+  { id: 'customer_inquiry', minute: 30, enabled: true, type: 'CUSTOMER', title: 'CUSTOMER ALERT — 고객사 품질팀 문의', message: '' },
+  { id: 'other_line', minute: 40, enabled: true, type: 'QUALITY', title: 'QUALITY ALERT — 타 라인 동일 현상 발견', message: '' }
+];
+
+FDL.DEFAULT_CONFIG = {
+  version: 1,
+  caseId: 'A',
+  caseName: 'SMT Line 2 — 전장용 파워모듈 PM-220 불량 급증',
+  difficulty: 'NORMAL',
+  timeLimitMin: 45,
+  speed: 1,
+  startClock: '09:00',
+  seed: 20260929,
+  rootCause: {
+    material: true,       // 신규 Solder Paste Lot 영향
+    eqId: 'EQ-03',        // 이상 설비
+    recipeError: true,    // 야간조 Changeover 시 구 레시피(Rev.C) 로드
+    tcDrift: true         // 해당 설비 Zone 6 열전대 편차
+  },
+  effects: {
+    base: 1.9,            // 정상 불량률 (%)
+    lotEffect: 1.3,       // 신규 Lot 단독 영향 (전 설비)
+    recipeEffect: 1.0,    // 구 레시피 단독 영향
+    interaction: 8.6,     // 신규 Lot × 구 레시피 결합 영향
+    tcDrift: 0.8,         // 열전대 편차 영향 (현재)
+    tcDriftRamp: 0.1      // 방치 시 분당 추가 악화 (%p)
+  },
+  kpi: {
+    baseCapacity: 96,     // 생산량 계획 대비 기준 (%)
+    baseUtil: 87,         // 설비가동률 기준 (%)
+    deliveryBias: 0,      // 납기 예측 보정 (%p)
+    customerExposure0: 0.6, // 고객 Risk 초기 노출도
+    shipmentTarget: 12000, // 금일 18:00 출하 요구 수량
+    fgStock: 3100,        // 09:00 기준 완제품 재고 (어제 14:00 이후 생산분 포함)
+    planPerHour: 1100     // 시간당 계획 생산량 (ea)
+  },
+  events: JSON.parse(JSON.stringify(FDL.DEFAULT_EVENTS)),
+  conditionalEvents: {
+    capacityAlert: true, stopAllEscalation: true, materialStock: true,
+    customerEscalation: true, inspectionBottleneck: true, qualityCritical: true
+  },
+  dataVisibility: {},     // { moduleId: 'hidden' } — 기본은 모두 공개
+  actionParams: {},       // { actionId: { param: value } } — ACTIONS 기본값 덮어쓰기
+  weights: { SA: 1, DA: 1, HQ: 1, DM: 1, TM: 1, AD: 1 }
+};
+
+FDL.CASE_PRESETS = {
+  A: {
+    name: 'Case A · 복합 원인 (표준)',
+    caseName: 'SMT Line 2 — 전장용 파워모듈 PM-220 불량 급증',
+    desc: '원자재 Lot 변경 + 특정 설비 공정조건 + 야간조 Setting 오류가 결합된 표준 케이스',
+    rootCause: { material: true, eqId: 'EQ-03', recipeError: true, tcDrift: true },
+    effects: { base: 1.9, lotEffect: 1.3, recipeEffect: 1.0, interaction: 8.6, tcDrift: 0.8, tcDriftRamp: 0.1 }
+  },
+  B: {
+    name: 'Case B · 원자재 단독 (입문)',
+    caseName: 'SMT Line 2 — Solder Paste 변경 후 불량 증가',
+    desc: '신규 원자재 Lot 단독 원인. 설비별 차이가 없어 Lot 층별이 핵심',
+    rootCause: { material: true, eqId: null, recipeError: false, tcDrift: false },
+    effects: { base: 1.9, lotEffect: 3.9, recipeEffect: 0, interaction: 0, tcDrift: 0, tcDriftRamp: 0 }
+  },
+  C: {
+    name: 'Case C · 설비 + Setting (원자재 무관)',
+    caseName: 'SMT Line 2 — 특정 Reflow 불량 급증',
+    desc: '신규 Lot 투입은 Noise. 설비 열전대 편차 + 야간조 레시피 오류가 원인. Lot 격리는 효과 없음',
+    rootCause: { material: false, eqId: 'EQ-02', recipeError: true, tcDrift: true },
+    effects: { base: 1.9, lotEffect: 0, recipeEffect: 13.4, interaction: 0, tcDrift: 0.9, tcDriftRamp: 0.08 }
+  }
+};
+
+FDL.DIFFICULTY = {
+  EASY: { label: 'EASY', timeLimitMin: 50, hints: 'high', recipeInList: true },
+  NORMAL: { label: 'NORMAL', timeLimitMin: 45, hints: 'mid', recipeInList: false },
+  HARD: { label: 'HARD', timeLimitMin: 35, hints: 'low', recipeInList: false, recipeHidden: true }
+};
+
+/* ---------- 유틸 ---------- */
+FDL.clone = function (o) { return JSON.parse(JSON.stringify(o)); };
+
+FDL.deepMerge = function (base, over) {
+  if (!over || typeof over !== 'object') return base;
+  Object.keys(over).forEach(function (k) {
+    var v = over[k];
+    if (v && typeof v === 'object' && !Array.isArray(v) && base[k] && typeof base[k] === 'object' && !Array.isArray(base[k])) {
+      FDL.deepMerge(base[k], v);
+    } else {
+      base[k] = v;
+    }
+  });
+  return base;
+};
+
+FDL.actionParam = function (cfg, actionId, key) {
+  var o = cfg.actionParams && cfg.actionParams[actionId];
+  if (o && o[key] !== undefined && o[key] !== '') return Number(o[key]);
+  var a = FDL.ACTIONS.find(function (x) { return x.id === actionId; });
+  return a ? a.params[key] : undefined;
+};
+
+FDL.isVisible = function (cfg, moduleId) {
+  return !(cfg.dataVisibility && cfg.dataVisibility[moduleId] === 'hidden');
+};
+
+/* URL-safe base64 for Korean text */
+FDL.encodeCfg = function (obj) {
+  var s = JSON.stringify(obj);
+  var b = btoa(unescape(encodeURIComponent(s)));
+  return b.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+};
+FDL.decodeCfg = function (str) {
+  var b = str.replace(/-/g, '+').replace(/_/g, '/');
+  while (b.length % 4) b += '=';
+  return JSON.parse(decodeURIComponent(escape(atob(b))));
+};
+
+FDL.store = {
+  get: function (k, fallback) {
+    try { var v = localStorage.getItem(k); return v ? JSON.parse(v) : fallback; } catch (e) { return fallback; }
+  },
+  set: function (k, v) {
+    try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch (e) { return false; }
+  }
+};
+
+/* 게임에 적용할 설정: URL(#cfg=) > localStorage(강사 저장) > 기본값 */
+FDL.loadConfig = function () {
+  var cfg = FDL.clone(FDL.DEFAULT_CONFIG);
+  var src = 'default';
+  try {
+    var m = location.hash.match(/cfg=([^&]+)/);
+    if (m) { FDL.deepMerge(cfg, FDL.decodeCfg(m[1])); src = 'link'; }
+    else {
+      var saved = FDL.store.get('fdl.config', null);
+      if (saved) { FDL.deepMerge(cfg, saved); src = 'instructor'; }
+    }
+  } catch (e) { console.warn('config load failed', e); }
+  var sp = new URLSearchParams(location.search);
+  if (sp.get('speed')) cfg.speed = Number(sp.get('speed')) || cfg.speed;
+  cfg._source = src;
+  return cfg;
+};
+
+FDL.escape = function (s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+    return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+  });
+};
+
+/* ---------- 브라우저 대화상자 대체 (임베드 환경에서도 동작) ---------- */
+FDL.dialog = function (o) {
+  var bg = document.createElement('div');
+  bg.className = 'modal-bg';
+  bg.style.zIndex = 130;
+  bg.innerHTML = '<div class="modal" role="dialog" aria-modal="true"><div class="m-head"><h3>' + FDL.escape(o.title || '확인') + '</h3></div>' +
+    '<div class="m-body">' + (o.html || '<p style="margin:0;white-space:pre-wrap">' + FDL.escape(o.message || '') + '</p>') + '</div>' +
+    '<div class="m-foot">' + (o.cancel === false ? '' : '<button class="btn" data-no>' + FDL.escape(o.cancel || '취소') + '</button>') +
+    '<button class="btn primary" data-yes>' + FDL.escape(o.ok || '확인') + '</button></div></div>';
+  document.body.appendChild(bg);
+  var close = function () { bg.remove(); };
+  var no = bg.querySelector('[data-no]');
+  if (no) no.onclick = function () { close(); if (o.onNo) o.onNo(); };
+  bg.querySelector('[data-yes]').onclick = function () { close(); if (o.onYes) o.onYes(); };
+  bg.querySelector('[data-yes]').focus();
+  if (o.onOpen) o.onOpen(bg, close);
+  return close;
+};
+FDL.confirmBox = function (message, onYes, ok) { return FDL.dialog({ message: message, onYes: onYes, ok: ok }); };
+FDL.alertBox = function (message) { return FDL.dialog({ title: '알림', message: message, cancel: false }); };
+
+FDL.copyText = function (text, done) {
+  var ok = function () { if (done) done(true); };
+  var fail = function () { if (done) done(false); };
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(ok, fail);
+    else fail();
+  } catch (e) { fail(); }
+};
+
+/* JSON 파일 저장. 다운로드가 막힌 환경(임베드 뷰어)에서는 복사용 창을 띄움 */
+FDL.saveJson = function (obj, name) {
+  var text = JSON.stringify(obj, null, 1);
+  if (!window.FDL_EMBED) {
+    try {
+      var a = document.createElement('a');
+      a.href = URL.createObjectURL(new Blob([text], { type: 'application/json' }));
+      a.download = name; document.body.appendChild(a); a.click();
+      setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 500);
+      return;
+    } catch (e) { /* fall through */ }
+  }
+  FDL.dialog({
+    title: 'JSON 복사 — ' + name, ok: '복사', cancel: '닫기',
+    html: '<p class="muted" style="margin:0;font-size:13px">이 환경에서는 파일 다운로드가 제한됩니다. 아래 내용을 복사해 메모장에 붙여 넣고 <b>' + FDL.escape(name) + '</b> 로 저장하십시오.</p>' +
+      '<textarea id="fdlJsonOut" readonly style="width:100%;min-height:220px;font-family:var(--mono);font-size:11px">' + FDL.escape(text) + '</textarea>',
+    onYes: function () {},
+    onOpen: function (bg) {
+      var ta = bg.querySelector('#fdlJsonOut'), yes = bg.querySelector('[data-yes]');
+      yes.onclick = function () {
+        FDL.copyText(text, function (okd) {
+          if (!okd) { ta.focus(); ta.select(); }
+          yes.textContent = okd ? '복사됨 ✓' : '전체 선택됨 — Ctrl+C';
+        });
+      };
+    }
+  });
+};
+
+</script>
+  <script>
+/* ==========================================================================
+   FACTORY DECISION LAB — Simulation Model (Hidden Variables + Consequence)
+   모든 KPI/데이터는 Hidden Root Cause 설정과 현재 상태로부터 계산됩니다.
+   ========================================================================== */
+(function () {
+  var EQ = FDL.EQUIPMENT;
+  var EQ_OFFSET = { 'EQ-01': -0.1, 'EQ-02': 0.1, 'EQ-03': 0, 'EQ-04': 0.05 };
+  var LANE = { 'EQ-01': 'MT-01', 'EQ-02': 'MT-01', 'EQ-03': 'MT-02', 'EQ-04': 'MT-02' };
+  var OPERATOR = { day: { 'MT-01': '최OO (선임)', 'MT-02': '김OO (신규)' }, night: { 'MT-01': '한OO', 'MT-02': '정OO' } };
+  var H_LOT = -19;          // 어제 14:00 Paste Lot 변경
+  var H_PCB = -24;          // 어제 09:00 PCB Lot 변경
+  var H_RECIPE = -10 - 1 / 3; // 어제 22:40 Changeover
+  var UNITS_PER_EQ_HOUR = 275;
+
+  function hash(str) {
+    var h = 2166136261;
+    for (var i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); }
+    return h >>> 0;
+  }
+  function noise(seed, key) { return ((hash(seed + '|' + key) % 10000) / 10000) * 2 - 1; }
+  function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
+  function r1(v) { return Math.round(v * 10) / 10; }
+
+  function Model(cfg) {
+    this.cfg = cfg;
+    this.seed = String(cfg.seed || 1);
+    var eq = {};
+    EQ.forEach(function (id) { eq[id] = { status: 'RUN', prev: 'RUN', until: null }; });
+    this.s = {
+      t: 0,
+      lot: 'NEW',
+      oldStock: null,
+      eq: eq,
+      recipeFixed: false,
+      tcFixed: false,
+      rate: 1,
+      lineStopped: false,
+      fullInspection: false,
+      hold: false,
+      overtime: false,
+      commDone: false,
+      commAt: null,
+      exposure: cfg.kpi.customerExposure0,
+      produced: 0,
+      prodSum: 0,
+      prodN: 0,
+      lastDefect: null,
+      tasks: [],
+      unlocked: { pcn: false, line3: false, profile: {} },
+      findings: []
+    };
+    this.history = [];
+  }
+
+  Model.prototype.clock = function (t) {
+    var p = (this.cfg.startClock || '09:00').split(':');
+    var m = Math.round(Number(p[0]) * 60 + Number(p[1]) + (t === undefined ? this.s.t : t));
+    m = ((m % 1440) + 1440) % 1440;
+    return String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0');
+  };
+
+  Model.prototype.shiftAt = function (h) {
+    // h: 게임 시작(09:00) 기준 상대 시간(시간). 주간 08-20, 야간 20-08
+    var hod = ((9 + h) % 24 + 24) % 24;
+    return (hod >= 8 && hod < 20) ? 'day' : 'night';
+  };
+
+  /* 과거 시점(h, 시간 단위) 설비별 불량률 */
+  Model.prototype.historicDefect = function (id, h) {
+    var c = this.cfg, rc = c.rootCause, ef = c.effects;
+    var lotNew = h >= H_LOT;
+    var d = ef.base + EQ_OFFSET[id];
+    if (rc.material && lotNew) d += ef.lotEffect;
+    if (rc.eqId === id) {
+      if (rc.recipeError && h >= H_RECIPE) {
+        d += ef.recipeEffect;
+        if (rc.material && lotNew) d += ef.interaction;
+      }
+      if (rc.tcDrift) d += ef.tcDrift * clamp((h + 48) / 48, 0, 1);
+    }
+    d *= 1 + noise(this.seed, id + '@' + Math.round(h * 12)) * 0.07;
+    return Math.max(0.4, d);
+  };
+
+  /* 현재 상태 기준 설비별 불량률 */
+  Model.prototype.liveDefect = function (id, t) {
+    var c = this.cfg, rc = c.rootCause, ef = c.effects, s = this.s;
+    t = t === undefined ? s.t : t;
+    var lotNew = s.lot === 'NEW';
+    var d = ef.base + EQ_OFFSET[id];
+    if (rc.material && lotNew) d += ef.lotEffect;
+    if (rc.eqId === id) {
+      if (rc.recipeError && !s.recipeFixed) {
+        d += ef.recipeEffect;
+        if (rc.material && lotNew) {
+          var relief = s.rate < 1 ? FDL.actionParam(c, 'reduce', 'interactionRelief') : 0;
+          d += ef.interaction * (1 - relief);
+        }
+      }
+      if (rc.tcDrift && !s.tcFixed) d += ef.tcDrift + Math.min(ef.tcDriftRamp * t, 6);
+    }
+    d *= 1 + noise(this.seed, id + '#' + Math.floor(t / 3)) * 0.04;
+    return Math.max(0.4, d);
+  };
+
+  Model.prototype.running = function () {
+    var s = this.s;
+    if (s.lineStopped) return [];
+    return EQ.filter(function (id) { return s.eq[id].status === 'RUN'; });
+  };
+
+  Model.prototype.level = function (kind, v) {
+    if (kind === 'delivery') return v >= 1.03 ? 'LOW' : v >= 0.97 ? 'MEDIUM' : v >= 0.86 ? 'HIGH' : 'CRITICAL';
+    return v < 1.2 ? 'LOW' : v < 2.5 ? 'MEDIUM' : v < 4 ? 'HIGH' : 'CRITICAL';
+  };
+
+  /* KPI 스냅샷 */
+  Model.prototype.snapshot = function () {
+    var c = this.cfg, s = this.s, self = this;
+    var run = this.running();
+    var perEq = {};
+    EQ.forEach(function (id) { perEq[id] = { status: s.lineStopped ? 'STOP' : s.eq[id].status, defect: self.liveDefect(id) }; });
+    var defect;
+    if (run.length) {
+      defect = run.reduce(function (a, id) { return a + perEq[id].defect; }, 0) / run.length;
+      s.lastDefect = defect;
+    } else {
+      defect = s.lastDefect == null ? c.effects.base : s.lastDefect;
+    }
+    var share = run.length / EQ.length;
+    if (run.length > 0 && run.length < EQ.length) share = Math.min(1, share * (1 + FDL.actionParam(c, 'stop_eq', 'shiftGain')));
+    var prod = 0;
+    if (run.length) {
+      prod = c.kpi.baseCapacity * share * s.rate * (s.fullInspection ? FDL.actionParam(c, 'full_inspection', 'productionFactor') : 1);
+      prod -= Math.max(0, defect - c.effects.base);
+      prod = Math.max(0, prod);
+    }
+    var util = run.length ? c.kpi.baseUtil * (run.length / EQ.length) * (s.rate < 1 ? 0.93 : 1) : 0;
+
+    // 납기 예측
+    var remainH = Math.max(0, 9 - s.t / 60);
+    var fg = c.kpi.fgStock * (s.hold ? 0.5 : 1);
+    var projected = fg + s.produced + remainH * c.kpi.planPerHour * prod / 100 + (s.overtime ? FDL.actionParam(c, 'overtime', 'deliveryBonus') / 100 * c.kpi.shipmentTarget : 0);
+    var ratio = projected / c.kpi.shipmentTarget + (c.kpi.deliveryBias || 0) / 100;
+
+    return {
+      t: s.t, clock: this.clock(),
+      defect: defect, yield: 100 - defect, production: prod, util: util,
+      projected: projected, deliveryRatio: ratio, delivery: this.level('delivery', ratio),
+      exposure: s.exposure, customer: this.level('customer', s.exposure),
+      perEq: perEq, running: run.length, lot: s.lot
+    };
+  };
+
+  /* 1 게임 분 진행 */
+  Model.prototype.step = function (dt) {
+    var c = this.cfg, s = this.s;
+    var snap = this.snapshot();
+    // 누적 생산
+    s.produced += c.kpi.planPerHour * snap.production / 100 * dt / 60;
+    s.prodSum += snap.production * dt; s.prodN += dt;
+    // 고객 노출도 (유출)
+    if (snap.running > 0) {
+      var esc = s.fullInspection ? FDL.actionParam(c, 'full_inspection', 'escapeRate') : 0.10;
+      s.exposure += snap.defect / 100 * esc * 12 * (s.hold ? 0.3 : 1) * dt;
+    }
+    // 대체 Lot 소모
+    if (s.lot === 'OLD' && s.oldStock != null && snap.running > 0) {
+      s.oldStock -= dt * (snap.running / EQ.length) * s.rate;
+    }
+    s.t += dt;
+  };
+
+  Model.prototype.record = function () {
+    var snap = this.snapshot();
+    var rec = {
+      t: Math.round(snap.t), clock: snap.clock,
+      defect: r1(snap.defect), yield: r1(snap.yield), production: r1(snap.production), util: r1(snap.util),
+      delivery: snap.delivery, customer: snap.customer, ratio: Math.round(snap.deliveryRatio * 1000) / 1000,
+      exposure: Math.round(snap.exposure * 100) / 100, perEq: {},
+      lot: this.s.lot === 'NEW' ? 'SP-0925B' : 'SP-0911A'
+    };
+    Object.keys(snap.perEq).forEach(function (id) { rec.perEq[id] = { s: snap.perEq[id].status, d: r1(snap.perEq[id].defect) }; });
+    this.history.push(rec);
+    return rec;
+  };
+
+  /* ---------------- 조치 적용 (Consequence) ---------------- */
+  Model.prototype.apply = function (actionId, target) {
+    var c = this.cfg, s = this.s, notes = [];
+    var P = function (k) { return FDL.actionParam(c, actionId, k); };
+    switch (actionId) {
+      case 'continue':
+        notes.push('현 생산조건 유지'); break;
+      case 'reduce':
+        s.rate = P('rate'); notes.push('라인 속도 ' + Math.round(s.rate * 100) + '%로 조정'); break;
+      case 'stop_eq':
+        if (target && s.eq[target]) { s.eq[target].status = 'STOP'; notes.push(target + ' 정지, 물량 타 설비 분산'); }
+        break;
+      case 'restart_eq':
+        if (target && s.eq[target] && s.eq[target].status === 'STOP') { s.eq[target].status = 'RUN'; notes.push(target + ' 재가동'); }
+        break;
+      case 'stop_all':
+        s.lineStopped = true; notes.push('라인 전체 생산 중단'); break;
+      case 'resume_all':
+        s.lineStopped = false; notes.push('라인 생산 재개'); break;
+      case 'quarantine_lot':
+        if (s.lot === 'NEW' && (s.oldStock == null || s.oldStock > 0)) {
+          s.lot = 'OLD';
+          if (s.oldStock == null) s.oldStock = P('stockMin');
+          s.produced = Math.max(0, s.produced - P('wipLoss') / 100 * c.kpi.planPerHour);
+          notes.push('SP-0925B 격리 → SP-0911A 투입 (재고 약 ' + Math.round(s.oldStock) + '분)');
+        } else notes.push('대체 Lot 재고 없음 — 격리 불가');
+        break;
+      case 'full_inspection':
+        s.fullInspection = true; notes.push('최종검사 전수검사 전환'); break;
+      case 'hold_shipment':
+        if (!s.hold) { s.hold = true; s.exposure *= (1 - P('exposureCut')); }
+        notes.push('어제 14:00 이후 생산분 출하 보류'); break;
+      case 'customer_comm':
+        if (!s.commDone) { s.commDone = true; s.commAt = s.t; s.exposure = Math.max(0.3, s.exposure - P('exposureRelief')); }
+        notes.push('고객 품질팀 선제 공유'); break;
+      case 'overtime':
+        s.overtime = true; notes.push('잔업·특근 편성'); break;
+      case 'eq_inspection':
+        if (target && s.eq[target]) {
+          var e = s.eq[target];
+          if (e.status !== 'INSPECT') { e.prev = e.status === 'STOP' ? 'STOP' : 'RUN'; e.status = 'INSPECT'; }
+          s.tasks.push({ type: 'inspection', eq: target, doneAt: s.t + P('durationMin') });
+          notes.push(target + ' 긴급점검 착수 (약 ' + P('durationMin') + '분 소요)');
+        }
+        break;
+      case 'recipe_reset':
+        if (target && s.eq[target]) {
+          var e2 = s.eq[target];
+          if (e2.status === 'RUN' || e2.status === 'STOP') { e2.prev = e2.status; e2.status = 'SETUP'; }
+          s.tasks.push({ type: 'recipe', eq: target, doneAt: s.t + P('durationMin') });
+          notes.push(target + ' 레시피 재로드 (약 ' + P('durationMin') + '분 소요)');
+        }
+        break;
+      case 'supplier_inquiry':
+        if (!s.tasks.some(function (x) { return x.type === 'supplier'; }) && !s.unlocked.pcn) {
+          s.tasks.push({ type: 'supplier', doneAt: s.t + P('replyMin') });
+        }
+        notes.push('공급사 회신 대기 (약 ' + P('replyMin') + '분)'); break;
+    }
+    return notes;
+  };
+
+  /* 진행 중 작업 완료 처리 → 결과 이벤트 반환 */
+  Model.prototype.processTasks = function () {
+    var s = this.s, rc = this.cfg.rootCause, out = [], self = this;
+    var remain = [];
+    s.tasks.forEach(function (task) {
+      if (task.doneAt > s.t) { remain.push(task); return; }
+      if (task.type === 'inspection') {
+        var e = s.eq[task.eq];
+        e.status = s.tasks.some(function (x) { return x !== task && x.eq === task.eq && x.doneAt > s.t; }) ? e.status : e.prev;
+        s.unlocked.profile[task.eq] = true;
+        var lines = [];
+        if (rc.eqId === task.eq && rc.tcDrift && !s.tcFixed) {
+          s.tcFixed = true;
+          lines.push('Profiler 실측: Zone 6 실제 온도가 설정 대비 +7°C 높게 측정됨 (제어 열전대 편차) → 열전대 교체·교정 완료');
+        } else {
+          lines.push('Profiler 실측: 존별 실측 온도 설정 대비 ±1°C 이내 (정상)');
+        }
+        if (rc.eqId === task.eq && rc.recipeError && !s.recipeFixed) {
+          lines.push('로드된 레시피: PM220_RF_Rev.C (타 설비는 Rev.D). Soak 구간 설정이 타 설비 대비 5°C 낮음');
+          lines.push('※ 점검팀은 레시피를 임의 변경하지 않았습니다. 레시피 재설정 여부는 책임자 판단이 필요합니다.');
+        } else {
+          lines.push('로드된 레시피: PM220_RF_Rev.D (표준과 일치)');
+        }
+        lines.push('컨베이어 속도·N2 농도·Fan 회전수 정상');
+        s.findings.push({ t: s.t, eq: task.eq, lines: lines });
+        out.push({ id: 'inspection_done_' + task.eq, type: 'EQUIPMENT', title: 'EQUIPMENT REPORT — ' + task.eq + ' 긴급점검 결과', lines: lines });
+      } else if (task.type === 'recipe') {
+        var e3 = s.eq[task.eq];
+        e3.status = e3.prev === 'STOP' ? 'STOP' : 'RUN';
+        var fixed = rc.eqId === task.eq && rc.recipeError && !s.recipeFixed;
+        if (fixed) s.recipeFixed = true;
+        out.push({ id: 'recipe_done_' + task.eq, type: 'EQUIPMENT', title: 'EQUIPMENT — ' + task.eq + ' 레시피 재로드 완료',
+          lines: [fixed ? '레시피 PM220_RF_Rev.C → Rev.D 로 변경 로드되었습니다.' : '기존과 동일한 Rev.D 레시피가 재로드되었습니다. (변경 사항 없음)', task.eq + ' 가동 상태로 복귀했습니다.'] });
+      } else if (task.type === 'supplier') {
+        s.unlocked.pcn = true;
+        var lines2 = rc.material ? [
+          '공급사 회신: SP-0925B 는 활성제(Flux) 배합 변경 Lot 입니다. (PCN-0917, 9/17 통보)',
+          '점도 204 Pa·s 로 규격(160~210) 상한에 근접한 Lot 이며, 변경 배합은 Soak 구간 +5°C 권장 Profile 필요.',
+          '대체 Lot SP-0927C (점도 185) 는 내일 06:00 입고 가능합니다.'
+        ] : [
+          '공급사 회신: SP-0925B 는 PCN-0917(활성제 배합 변경) 적용 Lot 이며 출하검사 전 항목 합격입니다.',
+          '동일 Lot 을 사용하는 타 고객사 이상 보고는 없습니다. 권장 Profile 은 Soak +5°C (귀사 Rev.D 반영 완료).',
+          '대체 Lot 이 필요하면 내일 06:00 입고 가능합니다.'
+        ];
+        out.push({ id: 'supplier_reply', type: 'MATERIAL', title: 'MATERIAL — 공급사 회신 도착', lines: lines2 });
+      }
+    });
+    s.tasks = remain;
+    // 대체 Lot 소진
+    if (s.lot === 'OLD' && s.oldStock != null && s.oldStock <= 0) {
+      s.lot = 'NEW';
+      out.push({ id: 'stock_out', type: 'MATERIAL', title: 'MATERIAL ALERT — 대체 Lot 소진',
+        lines: ['SP-0911A 재고가 소진되었습니다.', '생산 유지를 위해 라인에 SP-0925B 가 다시 투입되었습니다. 추가 판단이 필요합니다.'] });
+    }
+    return out;
+  };
+
+  /* ---------------- 데이터 생성 (탐색용) ---------------- */
+  Model.prototype.trend7d = function () {
+    var self = this, out = [];
+    for (var d = 6; d >= 2; d--) {
+      out.push({ label: 'D-' + d, value: r1(this.cfg.effects.base + 0.05 * (6 - d) * 0.3 + noise(this.seed, 'day' + d) * 0.12) });
+    }
+    // 어제: 00~24시 평균
+    var sum = 0, n = 0;
+    for (var h = -33; h < -9; h += 0.5) { EQ.forEach(function (id) { sum += self.historicDefect(id, h); n++; }); }
+    out.push({ label: 'D-1 (어제)', value: r1(sum / n) });
+    out.push({ label: '오늘', value: r1(this.snapshot().defect), live: true });
+    return out;
+  };
+
+  Model.prototype.hourly = function () {
+    var self = this, labels = [], series = {}, overall = [];
+    EQ.forEach(function (id) { series[id] = []; });
+    for (var h = -24; h < 0; h++) {
+      labels.push(this.clock(h * 60));
+      var sum = 0;
+      EQ.forEach(function (id) {
+        var v = 0; for (var k = 0; k < 4; k++) v += self.historicDefect(id, h + k / 4); v /= 4;
+        series[id].push(r1(v)); sum += v;
+      });
+      overall.push(r1(sum / EQ.length));
+    }
+    // 게임 진행분 (5분 단위)
+    for (var i = 0; i < this.history.length; i += 5) {
+      var rec = this.history[i];
+      labels.push(rec.clock);
+      EQ.forEach(function (id) { series[id].push(rec.perEq[id].s === 'RUN' ? rec.perEq[id].d : null); });
+      overall.push(rec.defect);
+    }
+    return { labels: labels, series: series, overall: overall, liveFrom: 24 };
+  };
+
+  Model.prototype.pareto = function () {
+    var base = this.cfg.effects.base;
+    var now = this.snapshot().defect;
+    var baseMix = [['부품 틀어짐', 0.30], ['미납 (Insufficient)', 0.24], ['Solder Bridge', 0.16], ['Void', 0.12], ['Tombstone', 0.10], ['기타', 0.08]];
+    var excessMix = { 'Solder Bridge': 0.52, 'Void': 0.38, '미납 (Insufficient)': 0.10 };
+    var ex = Math.max(0, now - base);
+    return baseMix.map(function (m) {
+      var today = base * m[1] + ex * (excessMix[m[0]] || 0);
+      return { label: m[0], baseline: Math.round(base * m[1] * 100) / 100, today: Math.round(today * 100) / 100 };
+    }).sort(function (a, b) { return b.today - a.today; });
+  };
+
+  /* 표본 생성: 과거(시간 단위) + 게임 진행(분 단위) */
+  Model.prototype.samples = function (period) {
+    var self = this, out = [];
+    var from = period === '24h' ? -24 : period === 'today' ? -1 : -48;
+    for (var h = from; h < 0; h += 0.5) {
+      var shift = this.shiftAt(h);
+      EQ.forEach(function (id) {
+        out.push({
+          eq: id, h: h, d: self.historicDefect(id, h), n: UNITS_PER_EQ_HOUR / 2,
+          lot: h >= H_LOT ? 'SP-0925B' : 'SP-0911A', pcb: h >= H_PCB ? 'PCB-0920' : 'PCB-0913',
+          shift: shift, lane: LANE[id], op: OPERATOR[shift][LANE[id]],
+          hod: self.clock(Math.floor(h) * 60).slice(0, 2) + '시'
+        });
+      });
+    }
+    this.history.forEach(function (rec) {
+      EQ.forEach(function (id) {
+        if (rec.perEq[id].s !== 'RUN') return;
+        out.push({
+          eq: id, h: rec.t / 60, d: rec.perEq[id].d, n: UNITS_PER_EQ_HOUR / 60,
+          lot: rec.lot || 'SP-0925B', pcb: 'PCB-0920', shift: 'day', lane: LANE[id], op: OPERATOR.day[LANE[id]],
+          hod: rec.clock.slice(0, 2) + '시'
+        });
+      });
+    });
+    return out;
+  };
+
+  FDL.STRAT_DIMS = {
+    eq: { label: 'Reflow 설비', key: 'eq' },
+    lot: { label: 'Solder Paste Lot', key: 'lot' },
+    shift: { label: '작업조 (주간/야간)', key: 'shiftLabel' },
+    pcb: { label: 'PCB Lot', key: 'pcb' },
+    lane: { label: '실장 Lane (Mounter)', key: 'lane' },
+    op: { label: '실장 작업자', key: 'op' },
+    hod: { label: '시간대', key: 'hod' }
+  };
+
+  Model.prototype.groupKey = function (smp, dim) {
+    if (dim === 'shift') {
+      var h = smp.h;
+      if (h >= -1) return '주간조 (오늘)';
+      if (h >= -13) return '야간조 (어젯밤)';
+      if (h >= -25) return '주간조 (어제)';
+      if (h >= -37) return '야간조 (그젯밤)';
+      return '주간조 (그제)';
+    }
+    return smp[FDL.STRAT_DIMS[dim].key];
+  };
+
+  Model.prototype.strat = function (dim, period) {
+    var self = this, g = {};
+    this.samples(period).forEach(function (smp) {
+      var k = self.groupKey(smp, dim);
+      if (!g[k]) g[k] = { label: k, def: 0, n: 0, first: smp.h };
+      g[k].def += smp.d / 100 * smp.n; g[k].n += smp.n;
+      g[k].first = Math.min(g[k].first, smp.h);
+    });
+    var rows = Object.keys(g).map(function (k) { return { label: k, defect: r1(g[k].def / g[k].n * 100), units: Math.round(g[k].n), first: g[k].first }; });
+    if (dim === 'hod' || dim === 'shift') rows.sort(function (a, b) { return a.first - b.first; });
+    else rows.sort(function (a, b) { return a.label < b.label ? -1 : 1; });
+    return rows;
+  };
+
+  Model.prototype.cross = function (dimA, dimB, period) {
+    var self = this, cells = {}, rowsK = {}, colsK = {};
+    this.samples(period).forEach(function (smp) {
+      var a = self.groupKey(smp, dimA), b = self.groupKey(smp, dimB);
+      rowsK[a] = Math.min(rowsK[a] === undefined ? 99 : rowsK[a], smp.h);
+      colsK[b] = Math.min(colsK[b] === undefined ? 99 : colsK[b], smp.h);
+      var k = a + '||' + b;
+      if (!cells[k]) cells[k] = { def: 0, n: 0 };
+      cells[k].def += smp.d / 100 * smp.n; cells[k].n += smp.n;
+    });
+    function order(obj, dim) {
+      var ks = Object.keys(obj);
+      if (dim === 'hod' || dim === 'shift') return ks.sort(function (x, y) { return obj[x] - obj[y]; });
+      return ks.sort();
+    }
+    var rows = order(rowsK, dimA), cols = order(colsK, dimB);
+    var m = rows.map(function (r) {
+      return cols.map(function (cName) {
+        var cell = cells[r + '||' + cName];
+        return cell ? { v: r1(cell.def / cell.n * 100), n: Math.round(cell.n) } : null;
+      });
+    });
+    return { rows: rows, cols: cols, m: m };
+  };
+
+  Model.prototype.recipeOf = function (id) {
+    var rc = this.cfg.rootCause;
+    return (rc.eqId === id && rc.recipeError && !this.s.recipeFixed) ? 'Rev.C' : 'Rev.D';
+  };
+
+  Model.prototype.zoneTable = function (id) {
+    var rev = this.recipeOf(id);
+    var sp = rev === 'Rev.D' ? [120, 150, 170, 180, 215, 245, 235, 180] : [120, 150, 165, 175, 215, 240, 235, 180];
+    var rc = this.cfg.rootCause, s = this.s, self = this;
+    var drift = rc.eqId === id && rc.tcDrift && !s.tcFixed;
+    return sp.map(function (v, i) {
+      var pv = v + Math.round(noise(self.seed, id + 'z' + i) * 10) / 10;
+      var out = 55 + Math.round((noise(self.seed, id + 'o' + i) + 1) * 8);
+      if (drift && i === 5) out = 91 + Math.round(Math.min(s.t / 10, 3));
+      return { zone: 'Z' + (i + 1), sv: v, pv: r1(pv), out: out };
+    });
+  };
+
+  Model.prototype.alarms = function (id) {
+    var rc = this.cfg.rootCause, list = [];
+    if (rc.eqId === id && rc.tcDrift) {
+      list.push({ time: '어제 23:52', code: 'W-216', msg: 'Zone 6 Heater 출력 90% 초과 (Warning) — 작업자 Reset' });
+      list.push({ time: '오늘 04:17', code: 'W-216', msg: 'Zone 6 Heater 출력 90% 초과 (Warning) — 작업자 Reset' });
+      if (!this.s.tcFixed) list.push({ time: '오늘 08:41', code: 'W-216', msg: 'Zone 6 Heater 출력 92% (Warning)' });
+    }
+    if (id === 'EQ-01') list.push({ time: '어제 15:05', code: 'I-102', msg: '컨베이어 폭 자동조정 완료 (Info)' });
+    if (id === 'EQ-04') list.push({ time: '그제 11:30', code: 'W-310', msg: 'N2 농도 일시 상승 1,050ppm (Warning) — 자동 복귀' });
+    if (id === 'EQ-02') list.push({ time: '오늘 06:12', code: 'I-120', msg: '냉각 Fan 정기 점검 알림 (Info)' });
+    return list;
+  };
+
+  Model.prototype.changeoverEq = function () { return this.cfg.rootCause.eqId || 'EQ-02'; };
+
+  FDL.Model = Model;
+  FDL.util = { r1: r1, clamp: clamp, noise: noise };
+})();
+
+</script>
+  <script>
+/* ==========================================================================
+   FACTORY DECISION LAB — Lightweight SVG charts (no external dependency)
+   ========================================================================== */
+(function () {
+  var esc = function (s) { return FDL.escape(s); };
+  FDL.SERIES = ['#3987e5', '#d95926', '#199e70', '#c98500']; // validated on dark surface
+  FDL.STATUS = { good: '#0ca30c', warning: '#fab219', serious: '#ec835a', critical: '#d03b3b' };
+
+  function niceMax(v) {
+    if (v <= 0) return 1;
+    var p = Math.pow(10, Math.floor(Math.log10(v)));
+    var n = v / p;
+    var m = n <= 1 ? 1 : n <= 2 ? 2 : n <= 2.5 ? 2.5 : n <= 5 ? 5 : 10;
+    return m * p;
+  }
+
+  /* Line chart with crosshair tooltip */
+  function line(o) {
+    var W = o.width || 760, H = o.height || 240, L = 40, R = 16, T = 14, B = 30;
+    var n = o.labels.length;
+    var all = [];
+    o.series.forEach(function (s) { s.values.forEach(function (v) { if (v != null) all.push(v); }); });
+    var yMax = o.yMax != null ? o.yMax : niceMax(Math.max.apply(null, all.concat([1])) * 1.1);
+    var yMin = o.yMin || 0;
+    var x = function (i) { return L + (n <= 1 ? 0 : i * (W - L - R) / (n - 1)); };
+    var y = function (v) { return T + (H - T - B) * (1 - (v - yMin) / (yMax - yMin)); };
+    var svg = '<svg class="chart" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="' + esc(o.title || 'line chart') + '">';
+    // grid
+    for (var g = 0; g <= 4; g++) {
+      var gv = yMin + (yMax - yMin) * g / 4;
+      svg += '<line class="grid" x1="' + L + '" x2="' + (W - R) + '" y1="' + y(gv) + '" y2="' + y(gv) + '"/>';
+      svg += '<text class="axis" x="' + (L - 6) + '" y="' + (y(gv) + 4) + '" text-anchor="end">' + (Math.round(gv * 10) / 10) + '</text>';
+    }
+    if (o.liveFrom != null && o.liveFrom < n) {
+      svg += '<rect class="live-zone" x="' + x(o.liveFrom) + '" y="' + T + '" width="' + (W - R - x(o.liveFrom)) + '" height="' + (H - T - B) + '"/>';
+      svg += '<text class="axis live-label" x="' + (x(o.liveFrom) + 4) + '" y="' + (T + 11) + '">LIVE</text>';
+    }
+    (o.refLines || []).forEach(function (r) {
+      svg += '<line class="ref" x1="' + L + '" x2="' + (W - R) + '" y1="' + y(r.value) + '" y2="' + y(r.value) + '"/>';
+      svg += '<text class="axis" x="' + (W - R) + '" y="' + (y(r.value) - 4) + '" text-anchor="end">' + esc(r.label) + '</text>';
+    });
+    // x labels
+    var step = Math.max(1, Math.ceil(n / (o.maxXLabels || 8)));
+    o.labels.forEach(function (lb, i) {
+      if (i % step === 0 || (i === n - 1 && (n - 1) % step >= step / 2)) svg += '<text class="axis" x="' + x(i) + '" y="' + (H - 10) + '" text-anchor="middle">' + esc(lb) + '</text>';
+    });
+    (o.markers || []).forEach(function (mk) {
+      svg += '<line class="marker" x1="' + x(mk.index) + '" x2="' + x(mk.index) + '" y1="' + T + '" y2="' + (H - B) + '"/>';
+      svg += '<text class="axis marker-label" x="' + (x(mk.index) + 3) + '" y="' + (H - B - 4) + '">' + esc(mk.label) + '</text>';
+    });
+    o.series.forEach(function (s) {
+      var d = '', pen = false;
+      s.values.forEach(function (v, i) {
+        if (v == null) { pen = false; return; }
+        d += (pen ? 'L' : 'M') + x(i).toFixed(1) + ' ' + y(v).toFixed(1) + ' ';
+        pen = true;
+      });
+      svg += '<path class="series" d="' + d + '" stroke="' + s.color + '"' + (s.dash ? ' stroke-dasharray="5 4"' : '') + (s.width ? ' stroke-width="' + s.width + '"' : '') + '/>';
+      // end label
+      for (var k = s.values.length - 1; k >= 0; k--) {
+        if (s.values[k] != null) {
+          svg += '<circle cx="' + x(k) + '" cy="' + y(s.values[k]) + '" r="4" fill="' + s.color + '" class="ring"/>';
+          break;
+        }
+      }
+    });
+    // hover columns
+    var colW = n > 1 ? (W - L - R) / (n - 1) : W;
+    o.labels.forEach(function (lb, i) {
+      var tip = '<b>' + esc(lb) + '</b>';
+      o.series.forEach(function (s) {
+        if (s.values[i] != null) tip += '<br><i style="background:' + s.color + '"></i>' + esc(s.name) + ' <b>' + s.values[i] + (o.unit || '') + '</b>';
+      });
+      svg += '<rect class="hover-col" x="' + (x(i) - colW / 2) + '" y="' + T + '" width="' + colW + '" height="' + (H - T - B) + '" data-tip="' + esc(tip) + '" data-x="' + x(i) + '"/>';
+    });
+    svg += '</svg>';
+    if (o.series.length > 1) {
+      svg += '<div class="legend">' + o.series.map(function (s) {
+        return '<span><i style="background:' + s.color + '"></i>' + esc(s.name) + '</span>';
+      }).join('') + '</div>';
+    }
+    return svg;
+  }
+
+  /* Vertical bar chart (single series) */
+  function bars(o) {
+    var W = o.width || 760, H = o.height || 220, L = 40, R = 12, T = 18, B = 30;
+    var n = o.items.length;
+    var max = o.max || niceMax(Math.max.apply(null, o.items.map(function (i) { return i.value; }).concat([1])) * 1.15);
+    var bw = Math.min(56, (W - L - R) / n - 10);
+    var y = function (v) { return T + (H - T - B) * (1 - v / max); };
+    var svg = '<svg class="chart" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="' + esc(o.title || 'bar chart') + '">';
+    for (var g = 0; g <= 4; g++) {
+      var gv = max * g / 4;
+      svg += '<line class="grid" x1="' + L + '" x2="' + (W - R) + '" y1="' + y(gv) + '" y2="' + y(gv) + '"/>';
+      svg += '<text class="axis" x="' + (L - 6) + '" y="' + (y(gv) + 4) + '" text-anchor="end">' + (Math.round(gv * 10) / 10) + '</text>';
+    }
+    (o.refLines || []).forEach(function (r) {
+      svg += '<line class="ref" x1="' + L + '" x2="' + (W - R) + '" y1="' + y(r.value) + '" y2="' + y(r.value) + '"/>';
+      svg += '<text class="axis" x="' + (W - R) + '" y="' + (y(r.value) - 4) + '" text-anchor="end">' + esc(r.label) + '</text>';
+    });
+    o.items.forEach(function (it, i) {
+      var cx = L + (i + 0.5) * (W - L - R) / n;
+      var top = y(it.value), h = Math.max(1, H - B - top);
+      var r = Math.min(4, h / 2);
+      var xL = cx - bw / 2;
+      var path = 'M' + xL + ' ' + (H - B) + ' V' + (top + r) + ' Q' + xL + ' ' + top + ' ' + (xL + r) + ' ' + top +
+        ' H' + (xL + bw - r) + ' Q' + (xL + bw) + ' ' + top + ' ' + (xL + bw) + ' ' + (top + r) + ' V' + (H - B) + ' Z';
+      svg += '<path d="' + path + '" fill="' + (it.color || FDL.SERIES[0]) + '" class="bar' + (it.muted ? ' muted' : '') + '"/>';
+      if (o.showValues !== false) svg += '<text class="val" x="' + cx + '" y="' + (top - 5) + '" text-anchor="middle">' + it.value + (o.unit || '') + '</text>';
+      svg += '<text class="axis" x="' + cx + '" y="' + (H - 10) + '" text-anchor="middle">' + esc(it.label) + '</text>';
+      svg += '<rect class="hover-col" x="' + (cx - bw / 2 - 4) + '" y="' + T + '" width="' + (bw + 8) + '" height="' + (H - T - B) + '" data-tip="' + esc('<b>' + esc(it.label) + '</b><br>' + it.value + (o.unit || '') + (it.sub ? '<br>' + esc(it.sub) : '')) + '"/>';
+    });
+    return svg + '</svg>';
+  }
+
+  /* Paired horizontal bars (baseline vs today) */
+  function pairedH(o) {
+    var W = o.width || 760, rowH = 34, L = 150, R = 60, T = 8;
+    var H = T + o.items.length * rowH + 8;
+    var max = niceMax(Math.max.apply(null, o.items.map(function (i) { return Math.max(i.a, i.b); })) * 1.1);
+    var xw = function (v) { return (W - L - R) * v / max; };
+    var svg = '<svg class="chart" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="' + esc(o.title || '') + '">';
+    o.items.forEach(function (it, i) {
+      var y0 = T + i * rowH;
+      svg += '<text class="axis lbl" x="' + (L - 8) + '" y="' + (y0 + 18) + '" text-anchor="end">' + esc(it.label) + '</text>';
+      svg += '<rect x="' + L + '" y="' + (y0 + 4) + '" width="' + Math.max(2, xw(it.a)) + '" height="10" rx="3" fill="' + o.colorA + '"/>';
+      svg += '<rect x="' + L + '" y="' + (y0 + 16) + '" width="' + Math.max(2, xw(it.b)) + '" height="10" rx="3" fill="' + o.colorB + '"/>';
+      svg += '<text class="val" x="' + (L + xw(it.b) + 6) + '" y="' + (y0 + 25) + '">' + it.b + (o.unit || '') + '</text>';
+      svg += '<rect class="hover-col" x="0" y="' + y0 + '" width="' + W + '" height="' + rowH + '" data-tip="' + esc('<b>' + esc(it.label) + '</b><br>' + o.nameA + ': ' + it.a + (o.unit || '') + '<br>' + o.nameB + ': ' + it.b + (o.unit || '')) + '"/>';
+    });
+    svg += '</svg><div class="legend"><span><i style="background:' + o.colorA + '"></i>' + esc(o.nameA) + '</span><span><i style="background:' + o.colorB + '"></i>' + esc(o.nameB) + '</span></div>';
+    return svg;
+  }
+
+  function sparkline(values, color) {
+    var W = 90, H = 26;
+    var v = values.filter(function (x) { return x != null; });
+    if (v.length < 2) return '<svg class="spark" viewBox="0 0 ' + W + ' ' + H + '"></svg>';
+    var mn = Math.min.apply(null, v), mx = Math.max.apply(null, v);
+    if (mx - mn < 0.5) { mx += 0.25; mn -= 0.25; }
+    var d = v.map(function (val, i) {
+      return (i ? 'L' : 'M') + (i * W / (v.length - 1)).toFixed(1) + ' ' + (H - 3 - (val - mn) / (mx - mn) * (H - 6)).toFixed(1);
+    }).join(' ');
+    return '<svg class="spark" viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="none"><path d="' + d + '" stroke="' + color + '"/></svg>';
+  }
+
+  /* Radar (0-100) */
+  function radar(o) {
+    var S = o.size || 360, cx = S / 2, cy = S / 2 + 6, Rr = S / 2 - 60, PAD = 70;
+    var n = o.axes.length;
+    var pt = function (i, v) {
+      var a = -Math.PI / 2 + i * 2 * Math.PI / n;
+      return [cx + Math.cos(a) * Rr * v / 100, cy + Math.sin(a) * Rr * v / 100];
+    };
+    var svg = '<svg class="chart radar" viewBox="' + (-PAD) + ' 0 ' + (S + PAD * 2) + ' ' + (S + 10) + '" role="img" aria-label="역량 레이더">';
+    [25, 50, 75, 100].forEach(function (lv) {
+      svg += '<polygon class="grid-poly" points="' + o.axes.map(function (_, i) { return pt(i, lv).join(','); }).join(' ') + '"/>';
+    });
+    o.axes.forEach(function (ax, i) {
+      var p = pt(i, 100), pl = pt(i, 122);
+      svg += '<line class="grid" x1="' + cx + '" y1="' + cy + '" x2="' + p[0] + '" y2="' + p[1] + '"/>';
+      var anchor = Math.abs(pl[0] - cx) < 10 ? 'middle' : pl[0] > cx ? 'start' : 'end';
+      svg += '<text class="axis lbl" x="' + pl[0] + '" y="' + (pl[1] + 4) + '" text-anchor="' + anchor + '">' + esc(ax) + '</text>';
+    });
+    o.series.forEach(function (s) {
+      var pts = s.values.map(function (v, i) { return pt(i, v).join(','); }).join(' ');
+      svg += '<polygon points="' + pts + '" fill="' + s.color + '" fill-opacity="0.18" stroke="' + s.color + '" stroke-width="2"/>';
+      s.values.forEach(function (v, i) {
+        var p = pt(i, v);
+        svg += '<circle cx="' + p[0] + '" cy="' + p[1] + '" r="4" fill="' + s.color + '" class="ring" data-tip="' + esc('<b>' + esc(s.name || '') + '</b><br>' + esc(o.axes[i]) + ': ' + v) + '"/>';
+      });
+    });
+    svg += '</svg>';
+    if (o.series.length > 1) {
+      svg += '<div class="legend">' + o.series.map(function (s) { return '<span><i style="background:' + s.color + '"></i>' + esc(s.name) + '</span>'; }).join('') + '</div>';
+    }
+    return svg;
+  }
+
+  /* Global tooltip */
+  function initTooltip() {
+    var tip = document.createElement('div');
+    tip.id = 'fdl-tip';
+    document.body.appendChild(tip);
+    document.addEventListener('mousemove', function (e) {
+      var t = e.target.closest && e.target.closest('[data-tip]');
+      if (!t) { tip.style.display = 'none'; return; }
+      tip.innerHTML = t.getAttribute('data-tip');
+      tip.style.display = 'block';
+      var x = e.clientX + 14, y = e.clientY + 14;
+      var r = tip.getBoundingClientRect();
+      if (x + r.width > window.innerWidth - 8) x = e.clientX - r.width - 14;
+      if (y + r.height > window.innerHeight - 8) y = e.clientY - r.height - 14;
+      tip.style.left = x + 'px'; tip.style.top = y + 'px';
+    });
+  }
+
+  FDL.charts = { line: line, bars: bars, pairedH: pairedH, sparkline: sparkline, radar: radar, initTooltip: initTooltip };
+})();
+
+</script>
+  <script>
+/* ==========================================================================
+   FACTORY DECISION LAB — AI Manufacturing Analyst (rule-based, case-bounded)
+   원칙: Case 데이터 범위 안에서만 답변 / 원인을 직접 알려주지 않음 / 확인 질문으로 되돌려줌
+   ========================================================================== */
+(function () {
+  var esc = FDL.escape;
+
+  var DIM_WORDS = [
+    ['eq', /(설비|eq-?\d*|리플로우|reflow|오븐)/i],
+    ['lot', /(lot|로트|랏|페이스트|paste|솔더|원자재)/i],
+    ['shift', /(작업조|야간|주간|조별|shift)/i],
+    ['pcb', /(pcb|기판)/i],
+    ['lane', /(lane|레인|마운터|mounter|실장기)/i],
+    ['op', /(작업자|오퍼레이터|operator|신규)/i],
+    ['hod', /(시간대|시간별)/i]
+  ];
+
+  /* 가설/최종 원인 텍스트 분류 (평가에도 사용) */
+  FDL.classify = function (text, cfg) {
+    var t = String(text || '');
+    var tags = {};
+    if (/(lot|로트|랏|페이스트|paste|솔더|flux|플럭스|점도|원자재|자재)/i.test(t) && !/^\s*(pcb|기판)/i.test(t)) tags.material = true;
+    var eqm = t.match(/eq-?0?([1-4])/i);
+    if (eqm) {
+      var id = 'EQ-0' + eqm[1];
+      if (cfg && cfg.rootCause.eqId === id) tags.equipment = true; else tags.wrongEq = true;
+    }
+    if (!tags.wrongEq && /(열전대|히터|heater|thermocouple|tc 편차|온도 편차|실측|profiler|프로파일러)/i.test(t)) tags.equipment = true;
+    if (!eqm && /(설비|리플로우|reflow|오븐)/i.test(t)) tags.equipmentGeneric = true;
+    if (/(레시피|recipe|rev\.?\s?[cd]|셋팅|세팅|setting|changeover|체인지오버|모델 ?교체|설정 ?오류|조건 ?오류|로드)/i.test(t)) tags.setting = true;
+    if (/(pcb|기판)/i.test(t)) tags.pcb = true;
+    if (/(신규 ?작업자|신입|김oo|숙련도)/i.test(t)) tags.operator = true;
+    if (/(노즐|nozzle|마운터|mounter|실장기)/i.test(t)) tags.nozzle = true;
+    if (/(aoi|검사 ?프로그램|오검출|false ?call)/i.test(t)) tags.aoi = true;
+    if (/(습도|공조|온습도)/i.test(t)) tags.humidity = true;
+    return tags;
+  };
+
+  function Analyst(game) { this.g = game; }
+
+  Analyst.prototype.table = function (rows, cols) {
+    var h = '<table class="mini"><thead><tr>' + cols.map(function (c) { return '<th>' + esc(c) + '</th>'; }).join('') + '</tr></thead><tbody>';
+    rows.forEach(function (r) { h += '<tr>' + r.map(function (c) { return '<td>' + c + '</td>'; }).join('') + '</tr>'; });
+    return h + '</tbody></table>';
+  };
+
+  Analyst.prototype.hint = function (level, text) {
+    var h = FDL.DIFFICULTY[this.g.cfg.difficulty].hints;
+    if (h === 'low') return '';
+    if (level === 'high' && h !== 'high') return '';
+    return '<p class="hint">💡 ' + text + '</p>';
+  };
+
+  Analyst.prototype.dims = function (q) {
+    var out = [];
+    DIM_WORDS.forEach(function (d) { if (d[1].test(q) && out.indexOf(d[0]) < 0) out.push(d[0]); });
+    return out;
+  };
+
+  Analyst.prototype.period = function (q) {
+    if (/(오늘|금일)/.test(q)) return 'today';
+    if (/(24|하루|어제)/.test(q)) return '24h';
+    return '48h';
+  };
+
+  Analyst.prototype.periodLabel = function (p) {
+    return p === 'today' ? '오늘 08:00~현재' : p === '24h' ? '최근 24시간' : '최근 48시간';
+  };
+
+  Analyst.prototype.hidden = function (moduleId) {
+    return !FDL.isVisible(this.g.cfg, moduleId);
+  };
+
+  Analyst.prototype.stratAnswer = function (dim, period) {
+    if (this.hidden('quality.strat')) return this.notProvided();
+    var m = this.g.model, rows = m.strat(dim, period);
+    var max = Math.max.apply(null, rows.map(function (r) { return r.defect; }));
+    var min = Math.min.apply(null, rows.map(function (r) { return r.defect; }));
+    var html = '<p>' + esc(FDL.STRAT_DIMS[dim].label) + '별 불량률을 비교했습니다. <span class="muted">(' + this.periodLabel(period) + ')</span></p>';
+    html += this.table(rows.map(function (r) {
+      return ['<b>' + esc(r.label) + '</b>', '<span class="' + (r.defect === max && max - min > 1 ? 'hi' : '') + '">' + r.defect.toFixed(1) + '%</span>', r.units.toLocaleString()];
+    }), [FDL.STRAT_DIMS[dim].label, '불량률', '생산수량']);
+    var top = rows.filter(function (r) { return r.defect === max; })[0];
+    if (max - min > 1.2) html += '<p>' + esc(top.label) + ' 에서 상대적으로 높은 불량률이 확인됩니다.</p>';
+    else html += '<p>그룹 간 뚜렷한 차이는 관찰되지 않습니다.</p>';
+    if (dim === 'eq') html += this.hint('mid', '특정 설비의 차이가 “언제부터” 시작됐는지, 다른 요인과 겹치는지도 확인해 보시겠습니까?');
+    if (dim === 'lot') html += this.hint('mid', 'Lot 전환 시점과 불량 상승 시점이 일치하는지, 설비별로 동일하게 나타나는지 확인해 보시겠습니까?');
+    if (dim === 'pcb' || dim === 'op' || dim === 'lane') html += this.hint('mid', '이 차이가 다른 변수와 겹쳐서(교란) 나타난 것은 아닌지 교차 분석으로 확인할 수 있습니다.');
+    if (dim === 'shift') html += this.hint('mid', '조별 차이가 “사람” 때문인지, 그 시간대에 “무언가 바뀐 것” 때문인지 구분이 필요합니다.');
+    return { html: html, key: 'strat.' + dim, label: 'AI 분석: ' + FDL.STRAT_DIMS[dim].label + '별 비교' };
+  };
+
+  Analyst.prototype.crossAnswer = function (a, b, period) {
+    if (this.hidden('quality.cross')) return this.notProvided();
+    var c = this.g.model.cross(a, b, period);
+    var html = '<p>' + esc(FDL.STRAT_DIMS[a].label) + ' × ' + esc(FDL.STRAT_DIMS[b].label) + ' 교차 분석 결과입니다. <span class="muted">(' + this.periodLabel(period) + ')</span></p>';
+    html += this.table(c.rows.map(function (r, i) {
+      return ['<b>' + esc(r) + '</b>'].concat(c.m[i].map(function (cell) { return cell ? cell.v.toFixed(1) + '%' : '<span class="muted">—</span>'; }));
+    }), [''].concat(c.cols));
+    html += '<p>교차 조건에 따라 불량률 편차가 다르게 나타납니다. 어떤 조합에서 차이가 커지는지 확인해 보십시오.</p>';
+    return { html: html, key: 'cross.' + [a, b].sort().join('x'), label: 'AI 분석: ' + FDL.STRAT_DIMS[a].label + ' × ' + FDL.STRAT_DIMS[b].label };
+  };
+
+  Analyst.prototype.notProvided = function () {
+    return { html: '<p>해당 데이터는 이번 교육 세션에서 제공되지 않습니다. 다른 관점의 데이터로 판단해 주십시오.</p>', key: null, label: 'AI 질의 (비공개 데이터)' };
+  };
+
+  Analyst.prototype.answer = function (raw) {
+    var q = String(raw || '').trim();
+    var g = this.g, m = g.model, cfg = g.cfg, rc = cfg.rootCause, self = this;
+    var snap = m.snapshot();
+    if (this.hidden('analyst')) return { html: '<p>AI Analyst 가 비활성화되어 있습니다.</p>' };
+
+    // 1) 정답 요구 → 원인 직접 제시 금지
+    if (/(정답|답 ?알려|원인.*(뭐|무엇|알려|말해)|뭐가 문제|어떻게 해야|해결책|결론 ?내려)/.test(q)) {
+      var notSeen = [];
+      if (!g.evidence['strat.eq']) notSeen.push('설비별 비교');
+      if (!g.evidence['strat.lot']) notSeen.push('원자재 Lot별 비교');
+      if (!g.evidence['strat.shift']) notSeen.push('작업조별 비교');
+      if (!g.evidence['history.changes']) notSeen.push('4M 변경점 이력');
+      var html = '<p>원인에 대한 판단은 책임자님의 몫입니다. 저는 데이터 분석을 지원하겠습니다.</p>' +
+        '<p>4M 관점(Man · Machine · Material · Method)으로 가설을 세우고, 각 가설을 지지/반박하는 데이터를 확인해 보시겠습니까?</p>';
+      if (notSeen.length) html += this.hint('mid', '아직 확인하지 않은 관점: ' + notSeen.join(', '));
+      return { html: html, key: null, label: 'AI 질의: 원인 문의', intent: 'ask_answer' };
+    }
+
+    // 2) 원인 단정 → 소크라테스식 되묻기
+    if (/(원인|범인|때문|주범|확실)/.test(q) && /(네|다|야|같아|같은데|듯|맞지|맞아|확실|이군|인가\?*$|겠)/.test(q) && !/(비교|보여|분석|알려)/.test(q)) {
+      var tags = FDL.classify(q, cfg);
+      var subj = q.match(/eq-?0?[1-4]/i) ? q.match(/eq-?0?[1-4]/i)[0].toUpperCase() :
+        tags.material ? '원자재 Lot' : tags.setting ? '공정조건/레시피' : tags.operator ? '작업자 요인' : tags.pcb ? 'PCB Lot' : '해당 요인';
+      var html2 = '<p>현재 데이터에서는 <b>' + esc(subj) + '</b>와(과) 불량 간 연관성이 관찰됩니다.</p>' +
+        '<p>다만 상관관계만으로 원인을 확정하기는 어렵습니다. <b>원인으로 확정하기 위해 어떤 정보를 추가로 확인하시겠습니까?</b></p>' +
+        '<ul class="tight"><li>변화 시점과 불량 상승 시점이 일치하는가?</li><li>다른 요인과 겹쳐 나타난 것은 아닌가? (교차 분석)</li><li>그 요인만 제거·변경했을 때 불량이 재현/해소되는가?</li><li>하나의 요인으로 전체 현상이 설명되는가?</li></ul>';
+      return { html: html2, key: null, label: 'AI 대화: 원인 주장 “' + q.slice(0, 40) + '”', intent: 'claim' };
+    }
+
+    // 3) 교차 분석
+    var dims = this.dims(q);
+    var period = this.period(q);
+    if (dims.length >= 2 && /(교차|별로|×|조합|같이|함께|나눠|x)/i.test(q)) return this.crossAnswer(dims[0], dims[1], period);
+
+    // 4) 레시피/공정조건
+    if (/(레시피|recipe|rev|버전|프로파일|profile|셋팅|세팅|setting|공정 ?조건|설정 ?온도|존 ?온도|zone)/i.test(q)) {
+      var html3 = '<p>Reflow 설비별 현재 로드 레시피와 주요 설정값입니다.</p>';
+      html3 += this.table(FDL.EQUIPMENT.map(function (id) {
+        var z = m.zoneTable(id);
+        return ['<b>' + id + '</b>', 'PM220_RF_' + m.recipeOf(id), z[2].sv + ' / ' + z[3].sv, z[5].sv, z[5].out + '%'];
+      }), ['설비', '레시피', 'Soak Z3/Z4(°C)', 'Peak Z6(°C)', 'Z6 Heater 출력']);
+      html3 += '<p class="muted">※ 표시 온도는 설비 자체 열전대 기준값입니다. 실제 기판 온도는 Profiler 실측(설비 점검) 시 확인 가능합니다.</p>';
+      html3 += this.hint('mid', '레시피 변경 이력과 설비별 설정 차이가 언제, 누구에 의해 생겼는지 작업일지에서 확인할 수 있습니다.');
+      return { html: html3, key: 'analyst.recipe', label: 'AI 분석: 설비별 레시피/공정조건' };
+    }
+
+    // 5) 변경점
+    if (/(달라진|변경|변화|바뀐|차이점|4m|어제와)/i.test(q)) {
+      if (this.hidden('history.changes')) return this.notProvided();
+      var html4 = '<p>최근 48시간 등록된 4M 변경점입니다. (변경점 관리대장 기준)</p>';
+      html4 += this.table(g.changeLog().map(function (c) { return [c.when, c.cat, esc(c.item)]; }), ['일시', '구분', '변경 내용']);
+      html4 += '<p class="muted">※ 변경점 관리대장에 등록되지 않은 작업(예: 교대 중 Changeover)은 작업일지에서 확인해야 합니다.</p>';
+      return { html: html4, key: 'history.changes', label: 'AI 분석: 변경점 조회' };
+    }
+
+    // 6) 단일 차원 층별
+    if (dims.length === 1 && dims[0] !== 'hod' || /(비교|별 ?불량|층별)/.test(q) && dims.length) {
+      return this.stratAnswer(dims[0], period);
+    }
+
+    // 7) 추이/시간
+    if (/(추이|트렌드|trend|시간대|언제부터|시작|시점|7일|일주일)/i.test(q)) {
+      if (this.hidden('quality.hourly')) return this.notProvided();
+      var hr = m.hourly();
+      var picks = [];
+      for (var i = 0; i < hr.labels.length; i += 2) picks.push([hr.labels[i], hr.overall[i].toFixed(1) + '%']);
+      var html5 = '<p>최근 24시간 시간대별 라인 불량률 (2시간 간격 표시)</p>' + this.table(picks, ['시각', '불량률']);
+      html5 += '<p>상승이 관찰되는 구간이 있습니다. 해당 시각 전후의 변경 사항과 대조해 보시겠습니까?</p>';
+      return { html: html5, key: 'quality.hourly', label: 'AI 분석: 시간대별 추이' };
+    }
+
+    if (/(유형|pareto|파레토|모드|종류)/i.test(q)) {
+      var p = m.pareto();
+      var html6 = '<p>불량 유형별 비율 (평시 → 현재, 라인 불량률 기여 %p)</p>' + this.table(p.map(function (r) { return [esc(r.label), r.baseline.toFixed(2), '<b>' + r.today.toFixed(2) + '</b>']; }), ['유형', '평시', '현재']);
+      html6 += '<p>증가폭이 큰 유형이 어느 공정(인쇄·실장·리플로우)과 관련이 깊은지 생각해 보십시오.</p>';
+      return { html: html6, key: 'quality.pareto', label: 'AI 분석: 불량 유형' };
+    }
+
+    if (/(습도|온습도|환경|공조)/.test(q)) {
+      return { html: '<p>SMT 동 공조: 온도 24.1°C / 습도 55~58%RH (관리기준 40~60%RH, 어제 19:30 설정 50→55% 변경). 관리기준 내에서 운영 중입니다.</p>', key: 'env.humidity', label: 'AI 분석: 환경 조건' };
+    }
+    if (/(aoi|검사기|오검출|false)/i.test(q)) {
+      return { html: '<p>AOI-01 프로그램 v3.2 (D-2 16:00 업데이트). False Call 률 0.8% → 0.9%. X-ray 샘플 재판정 결과 AOI 불량 판정 일치율 97% 입니다.</p>', key: 'aoi', label: 'AI 분석: AOI 검사' };
+    }
+    if (/(알람|alarm|경고)/i.test(q)) {
+      var rows = [];
+      FDL.EQUIPMENT.forEach(function (id) { m.alarms(id).forEach(function (a) { rows.push([id, a.time, esc(a.msg)]); }); });
+      return { html: '<p>최근 48시간 Reflow 설비 알람 이력입니다.</p>' + this.table(rows, ['설비', '일시', '내용']), key: 'eq.alarms', label: 'AI 분석: 설비 알람 이력' };
+    }
+    if (/(타 ?라인|line ?3|라인 ?3|다른 라인)/i.test(q)) {
+      if (!m.s.unlocked.line3) return { html: '<p>현재 타 라인에서 보고된 이상 정보는 없습니다.</p>', key: null, label: 'AI 질의: 타 라인' };
+      return { html: '<p>' + g.line3Text() + '</p>', key: 'line3', label: 'AI 분석: 타 라인 정보' };
+    }
+    if (/(재고|대체)/.test(q)) {
+      var st = m.s.oldStock == null ? FDL.actionParam(cfg, 'quarantine_lot', 'stockMin') : Math.max(0, Math.round(m.s.oldStock));
+      return { html: '<p>이전 Paste Lot SP-0911A 잔량: 약 ' + st + '분 생산 분량 (Full Rate 기준). 대체 신규 Lot 은 공급사 확인이 필요합니다.</p>', key: 'material.stock', label: 'AI 분석: 대체 자재 재고' };
+    }
+    if (/(납기|출하|생산량|계획|물량)/.test(q)) {
+      return { html: '<p>금일 18:00 출하 요구: <b>' + cfg.kpi.shipmentTarget.toLocaleString() + 'ea</b> · 현재 예상 출하 가능: <b>' + Math.round(snap.projected).toLocaleString() + 'ea</b> (' + Math.round(snap.deliveryRatio * 100) + '%)</p><p>계획 대비 생산 ' + snap.production.toFixed(1) + '% · 완제품 재고 ' + cfg.kpi.fgStock.toLocaleString() + 'ea (어제 14:00 이후 생산분 포함)</p>', key: 'production.plan', label: 'AI 분석: 납기/출하' };
+    }
+    if (/(고객)/.test(q)) {
+      return { html: '<p>고객사: 완성차 Tier-1 전장 모듈 업체. 최근 90일 클레임 0건. 현재 고객 Risk 는 ' + snap.customer + ' 입니다. 유출 가능 수량은 불량률·검사 방식·출하 여부에 따라 달라집니다.</p>', key: 'customer', label: 'AI 분석: 고객 현황' };
+    }
+    if (/(불량률|불량|수율)/.test(q)) {
+      return this.stratAnswer('eq', 'today');
+    }
+    return {
+      html: '<p>Case 데이터 범위 안에서 분석을 도와드립니다. 예를 들어 이렇게 요청해 보세요.</p><ul class="tight">' +
+        ['설비별 불량률 비교해줘', '어제와 오늘 달라진 조건이 뭐야?', 'Lot별로 비교해줘', '야간조와 주간조 차이가 있어?', '설비별로 Lot 교차 분석해줘', '설비별 레시피 확인해줘', '시간대별 추이 보여줘']
+          .map(function (s) { return '<li><a href="#" class="ask" data-q="' + esc(s) + '">' + esc(s) + '</a></li>'; }).join('') + '</ul>',
+      key: null, label: 'AI 질의: “' + q.slice(0, 30) + '”'
+    };
+  };
+
+  FDL.Analyst = Analyst;
+})();
+
+</script>
+  <script>
+/* ==========================================================================
+   FACTORY DECISION LAB — Debrief Scoring
+   “무엇을 맞혔는가”가 아니라 “어떻게 판단했는가”를 행동 로그 기반으로 분석
+   ========================================================================== */
+(function () {
+  var FACTOR_LABEL = { material: '원자재 Lot 변경 (Material)', equipment: '설비 조건 이상 (Machine)', setting: '작업 Setting 오류 (Method/Man)' };
+  var EVID_FACTOR = function (key, cfg) {
+    var rc = cfg.rootCause;
+    var f = [];
+    if (/^(strat\.lot|material\.coa|material\.lots|material\.pcn|line3|cross\..*lot)/.test(key)) f.push('material');
+    if (/^(strat\.eq|eq\.alarms|cross\..*eq)/.test(key) || key === 'eq.detail.' + rc.eqId || key === 'eq.inspect.' + rc.eqId) f.push('equipment');
+    if (/^(analyst\.recipe|people\.worklog|history\.incidents)/.test(key) || key === 'eq.detail.' + rc.eqId || key === 'eq.inspect.' + rc.eqId) f.push('setting');
+    return f;
+  };
+  var NOISE_KEYS = /^(strat\.(pcb|lane|op)|env\.|aoi|process\.mounter)/;
+  var CAT_OF = function (key) {
+    if (/(lot|material|pcb|line3)/.test(key)) return 'Material';
+    if (/(eq|equipment|lane|mounter|alarms)/.test(key)) return 'Machine';
+    if (/(shift|op|people)/.test(key)) return 'Man';
+    if (/(recipe|history|changes|incidents)/.test(key)) return 'Method';
+    return null;
+  };
+
+  function levelOf(v) { return v >= 80 ? '탁월' : v >= 65 ? '우수' : v >= 50 ? '보통' : v >= 35 ? '개선 필요' : '집중 개발 필요'; }
+  function clamp(v) { return Math.max(0, Math.min(100, Math.round(v))); }
+
+  FDL.activeFactors = function (cfg) {
+    var rc = cfg.rootCause, f = [];
+    if (rc.material) f.push('material');
+    if (rc.eqId && rc.tcDrift) f.push('equipment');
+    if (rc.eqId && rc.recipeError) f.push('setting');
+    return f;
+  };
+  FDL.FACTOR_LABEL = FACTOR_LABEL;
+
+  FDL.timelineHtml = function (log, all) {
+    var TYPE = { system: 'SYSTEM', view: 'EXPLORE', query: 'AI', hyp: 'HYPOTHESIS', hyp_update: 'HYPOTHESIS', decision: 'DECISION', event: 'EVENT', kpi: 'KPI', final: 'FINAL', ack: 'ACK' };
+    return log.filter(function (l) {
+      if (l.type === 'ack') return false;
+      if (all) return true;
+      return l.type !== 'view' && l.type !== 'query' || (l.key && /^(strat|cross|material|people\.worklog|history|analyst|line3|eq\.detail|quality\.(trend|pareto))/.test(l.key));
+    }).map(function (l) {
+      var sub = '';
+      if (l.type === 'decision') sub = '근거: ' + l.data.rationale + '\n결과: 불량률 ' + l.data.before.defect + '→' + l.data.after.defect + '%, 생산량 ' + l.data.before.production + '→' + l.data.after.production + '%, 납기 ' + l.data.before.delivery + '→' + l.data.after.delivery;
+      if (l.type === 'event' && l.data) sub = l.data.lines[0];
+      if (l.type === 'hyp' && l.data && l.data.evidence) sub = '근거: ' + l.data.evidence;
+      return '<div class="tl-item tl-' + l.type + '"><div class="tl-t">' + l.clock + '</div><div><span class="tl-type">' + (TYPE[l.type] || l.type) + '</span>' + FDL.escape(l.label) + (sub ? '<div class="tl-sub">' + FDL.escape(sub) + '</div>' : '') + '</div></div>';
+    }).join('');
+  };
+
+  FDL.score = function (game) {
+    var cfg = game.cfg, log = game.log, rc = cfg.rootCause;
+    var active = FDL.activeFactors(cfg);
+    var clock = function (t) { return game.model.clock(t); };
+    var first = function (pred) { for (var i = 0; i < log.length; i++) if (pred(log[i])) return log[i]; return null; };
+    var evid = game.evidence; // key -> first t
+    var factorFirst = {};
+    Object.keys(evid).forEach(function (k) {
+      EVID_FACTOR(k, cfg).forEach(function (f) { if (factorFirst[f] == null || evid[k] < factorFirst[f]) factorFirst[f] = evid[k]; });
+    });
+    var decisions = log.filter(function (l) { return l.type === 'decision'; });
+    var events = log.filter(function (l) { return l.type === 'event' && l.data && l.data.major; });
+    var hyps = game.hypotheses;
+    var fin = game.final || {};
+    var hist = game.model.history;
+    var start = game.startRec || hist[0] || {}, end = hist[hist.length - 1] || {};
+    var R = {};
+
+    /* ---------- SA : Situation Awareness ---------- */
+    (function () {
+      var s = 0, fb = [], ev = [];
+      var q = first(function (l) { return (l.type === 'view' || l.type === 'query') && /^(quality|strat|cross)/.test(l.key || ''); });
+      if (q) {
+        s += q.t <= 3 ? 40 : q.t <= 7 ? 30 : q.t <= 12 ? 18 : 8;
+        ev.push(q.clock + ' 첫 품질 데이터 확인');
+        if (q.t <= 5) fb.push('Alert 직후 ' + q.clock + '에 품질 데이터를 확인하며 빠르게 상황 파악에 착수했습니다.');
+        else fb.push('첫 품질 데이터 확인이 ' + q.clock + '로 다소 늦었습니다. Alert 직후 “무엇이, 언제부터, 얼마나” 변했는지 먼저 확인하는 습관이 필요합니다.');
+      } else fb.push('품질 데이터를 직접 확인하지 않았습니다. 현상의 규모와 시작 시점 파악이 판단의 출발점입니다.');
+      if (evid['quality.trend7d'] != null || evid['quality.hourly'] != null) s += 15; else fb.push('시간 추이(Trend) 확인이 없어 “언제부터” 문제가 시작됐는지 판단 근거가 약했습니다.');
+      if (evid['quality.pareto'] != null) s += 15; else fb.push('불량 유형(Pareto)을 보지 않아 관련 공정을 좁히는 단서를 놓쳤습니다.');
+      // 이벤트 반응성
+      var responded = 0;
+      events.forEach(function (e) {
+        var r = log.some(function (l) { return (l.type === 'decision' || l.type === 'view' || l.type === 'query' || l.type === 'hyp') && l.t >= e.t && l.t <= e.t + 8; });
+        if (r) responded++;
+      });
+      if (events.length) {
+        s += 30 * responded / events.length;
+        if (responded < events.length) fb.push('발생한 주요 Event ' + events.length + '건 중 ' + (events.length - responded) + '건은 8분 이내 후속 확인/조치가 없었습니다.');
+        else fb.push('주요 Event 발생 시마다 8분 이내 후속 확인 또는 조치를 이어갔습니다.');
+      } else s += 15;
+      R.SA = { score: clamp(s), feedback: fb, evidence: ev };
+    })();
+
+    /* ---------- DA : Data Analysis ---------- */
+    (function () {
+      var s = 0, fb = [];
+      var covered = active.filter(function (f) { return factorFirst[f] != null; });
+      s += active.length ? 45 * covered.length / active.length : 45;
+      var cats = {};
+      Object.keys(evid).forEach(function (k) { var c = CAT_OF(k); if (c) cats[c] = true; });
+      var nCats = Object.keys(cats).length;
+      s += Math.min(20, nCats * 5);
+      var crossUsed = Object.keys(evid).some(function (k) { return /^cross\./.test(k); });
+      if (crossUsed) { s += 15; fb.push('교차 분석을 활용해 요인 간 결합(교란) 여부를 검토했습니다.'); }
+      else fb.push('단일 층별 비교에 머물렀습니다. 복합 원인은 교차 분석(예: 설비 × Lot)에서 드러나는 경우가 많습니다.');
+      var queries = log.filter(function (l) { return l.type === 'query' && l.key; }).length;
+      if (queries >= 3) s += 10;
+      var noise = Object.keys(evid).filter(function (k) { return NOISE_KEYS.test(k); }).length;
+      var signal = Object.keys(evid).filter(function (k) { return EVID_FACTOR(k, cfg).length; }).length;
+      if (signal >= noise) s += 10; else fb.push('Noise 성격의 데이터(' + noise + '건) 확인 비중이 핵심 데이터(' + signal + '건)보다 컸습니다. 가설 기반으로 탐색 범위를 좁혀 보십시오.');
+      // 탐색 순서 피드백
+      var order = active.filter(function (f) { return factorFirst[f] != null; }).sort(function (a, b) { return factorFirst[a] - factorFirst[b]; });
+      if (order.length >= 2) {
+        var f0 = order[0], fl = order[order.length - 1];
+        if (factorFirst[fl] - factorFirst[f0] >= 12) fb.push(FACTOR_LABEL[f0] + ' 데이터에 먼저 집중하면서(' + clock(factorFirst[f0]) + '), ' + FACTOR_LABEL[fl] + ' 확인이 ' + clock(factorFirst[fl]) + '로 늦었습니다.');
+        else fb.push('여러 원인 후보 데이터를 비교적 균형 있게 탐색했습니다 (' + order.map(function (f) { return FACTOR_LABEL[f].split(' (')[0] + ' ' + clock(factorFirst[f]); }).join(', ') + ').');
+      }
+      active.forEach(function (f) { if (factorFirst[f] == null) fb.push(FACTOR_LABEL[f] + ' 관련 데이터를 확인하지 않았습니다.'); });
+      R.DA = { score: clamp(s), feedback: fb, cats: Object.keys(cats) };
+    })();
+
+    /* ---------- HQ : Hypothesis Quality ---------- */
+    (function () {
+      var s = 0, fb = [];
+      var n = hyps.length;
+      s += n >= 3 ? 15 : n === 2 ? 10 : n === 1 ? 5 : 0;
+      if (!n) fb.push('가설을 등록하지 않았습니다. 가설 없이 탐색하면 데이터가 판단으로 연결되기 어렵습니다.');
+      var hypTags = {};
+      hyps.forEach(function (h) { var t = FDL.classify(h.title + ' ' + h.evidence, cfg); Object.keys(t).forEach(function (k) { hypTags[k] = true; }); });
+      var hypCovered = active.filter(function (f) { return hypTags[f]; });
+      s += active.length ? 20 * hypCovered.length / active.length : 20;
+      var withEvidence = hyps.filter(function (h) { return (h.evidence || '').trim().length >= 15; }).length;
+      if (n) { s += 10 * withEvidence / n; if (withEvidence < n) fb.push('근거가 비어 있거나 짧은 가설이 ' + (n - withEvidence) + '건 있습니다. “어떤 데이터가 이 가설을 지지하는가”를 기록하십시오.'); }
+      var updates = log.filter(function (l) { return l.type === 'hyp_update'; }).length;
+      var rejected = hyps.filter(function (h) { return h.status === '기각'; }).length;
+      if (updates) { s += 10; fb.push('가설의 가능성·상태를 ' + updates + '회 갱신하며 데이터에 따라 판단을 수정했습니다.'); }
+      if (rejected) s += 5;
+      // 최종 Root Cause
+      var finTags = FDL.classify(fin.rootCauseText || '', cfg);
+      var IDX = [null, null, null, 'pcb', 'operator', 'nozzle', 'aoi', 'humidity'];
+      (fin.rcSel || []).forEach(function (x) {
+        if (x.i === 0) finTags.material = true;
+        else if (x.i === 1 || x.i === 2) {
+          if (x.eq === rc.eqId) finTags[x.i === 1 ? 'equipment' : 'setting'] = true; else finTags.wrongEq = true;
+        } else if (IDX[x.i]) finTags[IDX[x.i]] = true;
+      });
+      var finCovered = active.filter(function (f) { return finTags[f]; });
+      var falsePos = ['pcb', 'operator', 'nozzle', 'aoi', 'humidity', 'wrongEq'].filter(function (k) { return finTags[k]; });
+      if (!rc.material && finTags.material) falsePos.push('material');
+      s += active.length ? 30 * finCovered.length / active.length : 30;
+      s -= falsePos.length * 4;
+      if (active.length > 1) {
+        if (finCovered.length === active.length) fb.push('최종 판단에서 복합 원인 구조(' + active.map(function (f) { return FACTOR_LABEL[f].split(' (')[0]; }).join(' + ') + ')를 모두 식별했습니다.');
+        else if (finCovered.length) fb.push('최종 판단에서 일부 원인(' + finCovered.map(function (f) { return FACTOR_LABEL[f].split(' (')[0]; }).join(', ') + ')만 식별했습니다. 하나의 원인을 찾은 뒤에도 “이것으로 전체 현상이 설명되는가?”를 점검하십시오.');
+        else fb.push('최종 Root Cause 에 실제 원인 요인이 포함되지 않았습니다.');
+      } else if (finCovered.length === active.length) fb.push('최종 판단에서 실제 원인을 식별했습니다.');
+      if (falsePos.length) fb.push('최종 원인에 Noise 요인(' + falsePos.join(', ') + ')이 포함되었습니다. 상관관계와 인과관계를 구분하는 검증이 필요합니다.');
+      if (finCovered.length >= 2 || hypCovered.length >= 2) s += 10;
+      R.HQ = { score: clamp(s), feedback: fb, finCovered: finCovered, falsePos: falsePos };
+    })();
+
+    /* ---------- DM : Decision Making ---------- */
+    (function () {
+      var s = 0, fb = [];
+      if (!decisions.length) {
+        fb.push('게임 중 의사결정을 한 번도 실행하지 않았습니다. 불완전한 정보에서도 “임시 조치”를 먼저 실행하는 판단이 필요합니다.');
+      } else {
+        var d0 = decisions[0];
+        s += d0.t <= 12 ? 25 : d0.t <= 22 ? 18 : d0.t <= 32 ? 10 : 5;
+        fb.push('첫 의사결정: ' + d0.clock + ' — ' + d0.data.actions.map(function (a) { return a.label; }).join(', ') + '.');
+        var avgLen = decisions.reduce(function (a, d) { return a + (d.data.rationale || '').length; }, 0) / decisions.length;
+        var dataRef = decisions.filter(function (d) { return /(\d|%|eq|lot|로트|데이터|비교|추이)/i.test(d.data.rationale || ''); }).length;
+        s += Math.min(15, avgLen / 4) + 10 * dataRef / decisions.length;
+        if (dataRef < decisions.length) fb.push('판단 근거에 데이터(수치·비교 결과)가 인용되지 않은 결정이 ' + (decisions.length - dataRef) + '건 있습니다.');
+        else fb.push('모든 의사결정 근거에 데이터를 인용했습니다.');
+      }
+      var init = start.defect || 5.8, base = cfg.effects.base;
+      var improve = end.defect != null ? (init - end.defect) / Math.max(0.5, init - base) : 0;
+      s += 25 * Math.max(0, Math.min(1, improve));
+      if (improve >= 0.8) fb.push('불량률을 ' + init + '% → ' + end.defect + '%로 정상 수준에 가깝게 회복시켰습니다.');
+      else if (improve > 0.3) fb.push('불량률이 ' + init + '% → ' + end.defect + '%로 개선되었으나 정상 수준(' + base + '%)에는 도달하지 못했습니다.');
+      else fb.push('종료 시점 불량률 ' + end.defect + '% — 조치가 현상 개선으로 이어지지 않았습니다.');
+      var contained = game.model.s.hold || game.model.s.fullInspection || game.model.s.lineStopped;
+      if (contained) { s += 15; } else fb.push('유출 차단 조치(출하 보류·전수검사 등)가 없어 고객 유출 Risk 가 누적되었습니다.');
+      var finAct = ((fin.immediate || '') + (fin.production || '')).length;
+      s += Math.min(10, finAct / 12);
+      R.DM = { score: clamp(s), feedback: fb };
+    })();
+
+    /* ---------- TM : Trade-off Management ---------- */
+    (function () {
+      var s = 0, fb = [];
+      var lv = { LOW: 20, MEDIUM: 14, HIGH: 6, CRITICAL: 0 };
+      s += lv[end.delivery] || 0;
+      s += lv[end.customer] || 0;
+      s += end.defect <= 2.6 ? 20 : end.defect <= 3.6 ? 14 : end.defect <= 5 ? 6 : 0;
+      s += end.production >= 88 ? 20 : end.production >= 78 ? 14 : end.production >= 60 ? 6 : 0;
+      fb.push('종료 KPI — 불량률 ' + end.defect + '%, 생산량 ' + end.production + '%, 납기 Risk ' + end.delivery + ', 고객 Risk ' + end.customer + '.');
+      var capLoss = log.filter(function (l) { return l.type === 'kpi' && /납기 Risk/.test(l.label) && /(HIGH|CRITICAL)/.test(l.label); })[0];
+      var mitig = decisions.some(function (d) { return d.data.actions.some(function (a) { return /overtime|reduce|restart_eq|resume_all/.test(a.id); }); });
+      if (capLoss) {
+        if (mitig) { s += 10; fb.push(capLoss.clock + ' 납기 Risk 악화 이후 생산 만회(잔업·재가동·속도 조정) 방안을 함께 검토했습니다.'); }
+        else fb.push('품질 조치로 ' + capLoss.clock + ' 납기 Risk 가 악화되었으나 대체 생산계획(잔업·재가동 등) 검토가 부족했습니다.');
+      } else s += 5;
+      var collab = fin.collaboration || '';
+      var parties = ['생산', '품질', '구매', '설비', '고객', '공급사', '영업', '기술'].filter(function (p) { return collab.indexOf(p) >= 0; });
+      s += Math.min(6, parties.length * 2);
+      if ((fin.customer || '').trim().length >= 20) s += 4; else fb.push('고객 대응 계획이 구체적이지 않습니다. 유출 범위·임시 조치·보고 일정을 포함하십시오.');
+      if (parties.length >= 3) fb.push('협업 대상(' + parties.join('·') + ')을 폭넓게 설정했습니다.');
+      R.TM = { score: clamp(s), feedback: fb };
+    })();
+
+    /* ---------- AD : Adaptability ---------- */
+    (function () {
+      var s = 0, fb = [];
+      var adapted = 0;
+      events.forEach(function (e) {
+        if (decisions.some(function (d) { return d.t >= e.t && d.t <= e.t + 10; })) adapted++;
+      });
+      if (events.length) s += 35 * adapted / events.length;
+      if (events.length && adapted) fb.push('주요 Event ' + events.length + '건 중 ' + adapted + '건에 대해 10분 이내 재판단(의사결정)을 실행했습니다.');
+      else if (events.length) fb.push('새로운 Event 발생 후 판단을 갱신한 기록이 없습니다. 상황이 바뀌면 이전 결정도 재검토 대상입니다.');
+      var lateHyp = log.filter(function (l) { return (l.type === 'hyp' || l.type === 'hyp_update') && l.t >= 15; }).length;
+      if (lateHyp) { s += 20; fb.push('게임 중·후반(' + (log.filter(function (l) { return (l.type === 'hyp' || l.type === 'hyp_update') && l.t >= 15; })[0].clock) + ' 이후)에도 가설을 추가·수정하며 새 정보를 반영했습니다.'); }
+      else fb.push('초기 가설을 이후 정보로 갱신하지 않았습니다.');
+      s += decisions.length >= 3 ? 20 : decisions.length === 2 ? 14 : decisions.length === 1 ? 6 : 0;
+      var reversed = decisions.some(function (d) { return d.data.actions.some(function (a) { return /restart_eq|resume_all|recipe_reset/.test(a.id); }); });
+      if (reversed) { s += 10; fb.push('이전 조치를 재평가해 재가동·조건 복원 등 방향을 조정했습니다.'); }
+      var prev = fin.prevention || '';
+      if (/(표준|체크리스트|check|인터락|interlock|변경점|4m|교육|검증|승인|자동)/i.test(prev)) { s += 10; fb.push('재발방지 대책에 시스템적 장치(표준·체크리스트·인터락·변경점 관리 등)를 포함했습니다.'); }
+      else fb.push('재발방지 대책이 개인 주의 수준에 머물러 있습니다. 표준·인터락·변경점 관리 등 “구조” 차원의 대책을 고려하십시오.');
+      if ((fin.monitoring || []).length || (fin.monitoringText || '').length > 5) s += 5;
+      R.AD = { score: clamp(s), feedback: fb };
+    })();
+
+    var w = cfg.weights || {}, tw = 0, tot = 0;
+    FDL.DOMAINS.forEach(function (d) {
+      R[d.id].level = levelOf(R[d.id].score);
+      var ww = Number(w[d.id] == null ? 1 : w[d.id]); tw += ww; tot += ww * R[d.id].score;
+    });
+    return { domains: R, overall: tw ? Math.round(tot / tw) : 0, active: active, factorFirst: factorFirst };
+  };
+})();
+
+</script>
+  <script>
+/* ==========================================================================
+   FACTORY DECISION LAB — Instructor Mode
+   ========================================================================== */
+(function () {
+  var $ = function (s, r) { return (r || document).querySelector(s); };
+  var $$ = function (s, r) { return Array.prototype.slice.call((r || document).querySelectorAll(s)); };
+  var esc = FDL.escape;
+
+  var TABS = [
+    { id: 'case', label: 'Case · 난이도', ico: '◧' },
+    { id: 'root', label: 'Hidden Root Cause', ico: '◉' },
+    { id: 'kpi', label: 'KPI 초기값', ico: '▥' },
+    { id: 'data', label: '데이터 공개', ico: '◫' },
+    { id: 'events', label: 'Trigger Event', ico: '⚠' },
+    { id: 'conseq', label: 'Consequence', ico: '⇄' },
+    { id: 'eval', label: '평가기준', ico: '✓' },
+    { id: 'deploy', label: '배포 · 저장', ico: '⇪' },
+    { id: 'debrief', label: 'Debrief 비교', ico: '☷' }
+  ];
+
+  var saved = FDL.store.get('fdl.config', null);
+  var cfg = FDL.deepMerge(FDL.clone(FDL.DEFAULT_CONFIG), saved || {});
+  delete cfg._source;
+  var tab = 'case';
+  var dirty = false;
+  var imported = [];
+  var selected = {};
+
+  function setDirty(v) {
+    dirty = v;
+    $('#saveState').textContent = v ? '● 저장되지 않은 변경' : (saved ? '저장된 설정 사용 중' : '기본 설정');
+    $('#saveState').style.color = v ? 'var(--warn)' : '';
+  }
+
+  function get(path) { return path.split('.').reduce(function (o, k) { return o == null ? o : o[k]; }, cfg); }
+  function set(path, v) {
+    var ks = path.split('.'), o = cfg;
+    for (var i = 0; i < ks.length - 1; i++) { if (o[ks[i]] == null) o[ks[i]] = {}; o = o[ks[i]]; }
+    o[ks[ks.length - 1]] = v;
+  }
+
+  function inp(path, type, attrs) {
+    var v = get(path);
+    if (type === 'bool') return '<input type="checkbox" data-path="' + path + '" data-type="bool"' + (v ? ' checked' : '') + '>';
+    return '<input type="' + (type === 'num' ? 'number' : 'text') + '" data-path="' + path + '" data-type="' + type + '" value="' + esc(v == null ? '' : v) + '" ' + (attrs || '') + '>';
+  }
+  function field(label, html, cls, help) {
+    return '<div class="field ' + (cls || '') + '"><label>' + label + '</label>' + html + (help ? '<span class="muted" style="font-size:11px">' + help + '</span>' : '') + '</div>';
+  }
+  function sel(path, options) {
+    var v = get(path);
+    return '<select data-path="' + path + '" data-type="str">' + options.map(function (o) {
+      var val = Array.isArray(o) ? o[0] : o, lb = Array.isArray(o) ? o[1] : o;
+      return '<option value="' + esc(val) + '"' + (String(v) === String(val) ? ' selected' : '') + '>' + esc(lb) + '</option>';
+    }).join('') + '</select>';
+  }
+
+  function renderNav() {
+    $('#adminNav').innerHTML = '<div class="nav-title">SETTINGS</div>' + TABS.map(function (t) {
+      return (t.id === 'deploy' ? '<div class="nav-title" style="margin-top:10px">SESSION</div>' : '') + '<button data-tab="' + t.id + '" class="' + (t.id === tab ? 'active' : '') + '" title="' + t.label + '"><span class="ico">' + t.ico + '</span><span class="nav-label">' + t.label + '</span></button>';
+    }).join('');
+    $$('#adminNav button').forEach(function (b) { b.onclick = function () { tab = b.getAttribute('data-tab'); render(); }; });
+  }
+
+  function head(t, s) { return '<div class="view-head"><div><h2>' + t + '</h2><div class="sub">' + (s || '') + '</div></div></div>'; }
+
+  function preview() {
+    var m = new FDL.Model(cfg), s = m.snapshot();
+    var eqs = FDL.EQUIPMENT.map(function (id) { return '<div><div class="k">' + id + ' 불량률</div><div class="v">' + s.perEq[id].defect.toFixed(1) + '%</div></div>'; }).join('');
+    return '<div class="preview"><div><div class="k">초기 불량률</div><div class="v">' + s.defect.toFixed(1) + '%</div></div><div><div class="k">초기 생산량</div><div class="v">' + s.production.toFixed(1) + '%</div></div>' +
+      '<div><div class="k">납기 Risk</div><div class="v"><span class="lvl ' + s.delivery + '">' + s.delivery + '</span></div></div><div><div class="k">Customer Risk</div><div class="v"><span class="lvl ' + s.customer + '">' + s.customer + '</span></div></div>' + eqs + '</div>';
+  }
+
+  var VIEWS = {};
+  VIEWS.case = function () {
+    return head('Case · 난이도 · 시간', '교육 대상과 목적에 맞게 Case 를 선택하십시오.') +
+      '<div class="card" style="margin-bottom:12px"><h3>CASE 선택</h3><div class="grid c3">' + Object.keys(FDL.CASE_PRESETS).map(function (k) {
+        var p = FDL.CASE_PRESETS[k];
+        return '<button class="card" data-preset="' + k + '" style="text-align:left;cursor:pointer;' + (cfg.caseId === k ? 'border-color:var(--accent);box-shadow:0 0 0 1px var(--accent) inset' : '') + '"><b>' + esc(p.name) + '</b><div class="muted" style="font-size:12px;margin-top:6px">' + esc(p.desc) + '</div></button>';
+      }).join('') + '</div><p class="note">Case 를 선택하면 Hidden Root Cause 와 영향 계수가 해당 프리셋으로 설정됩니다. 이후 세부 조정이 가능합니다.</p></div>' +
+      '<div class="card"><div class="form-grid">' +
+      field('Case 명 (교육생 화면 표시)', inp('caseName', 'str'), 'wide') +
+      field('난이도', sel('difficulty', [['EASY', 'EASY — AI 힌트 많음, 레시피 버전 목록 표시'], ['NORMAL', 'NORMAL — 표준'], ['HARD', 'HARD — 힌트 없음, 레시피 버전 비표시']])) +
+      field('제한시간 (분)', inp('timeLimitMin', 'num', 'min="10" max="120"'), '', '기본 45분. 이벤트 시점도 함께 조정하십시오.') +
+      field('진행 속도 (배속)', inp('speed', 'num', 'min="0.5" max="10" step="0.5"'), '', '1 = 실시간. 2 = 45분 Case 를 22.5분에 진행') +
+      field('데이터 Seed', inp('seed', 'num'), '', 'Noise 패턴 고정용. 팀 간 동일 데이터 보장') +
+      '</div><div class="row" style="margin-top:12px"><button class="btn sm" id="applyDiff">난이도 기본 제한시간 적용</button></div></div>';
+  };
+
+  VIEWS.root = function () {
+    var rc = cfg.rootCause;
+    return head('Hidden Root Cause', '교육생에게 보이지 않는 실제 원인 구조. 모든 데이터·KPI 는 이 설정에서 계산됩니다.') +
+      '<div class="callout" style="margin-bottom:12px">원인은 단일이 아니라 결합 구조로 구성하는 것을 권장합니다. 하나의 원인을 발견했다고 문제가 해결되지 않도록 설계되어 있습니다.</div>' +
+      '<div class="grid c2"><div class="card"><h3>원인 요인</h3>' +
+      '<label class="row" style="margin-bottom:8px">' + inp('rootCause.material', 'bool') + ' <b>원자재</b> — 신규 Solder Paste Lot(SP-0925B) 영향</label>' +
+      '<div class="row" style="margin-bottom:8px"><b>이상 설비</b> ' + sel('rootCause.eqId', [['', '없음'], 'EQ-01', 'EQ-02', 'EQ-03', 'EQ-04']) + '</div>' +
+      '<label class="row" style="margin-bottom:8px">' + inp('rootCause.tcDrift', 'bool') + ' <b>설비 조건</b> — 이상 설비 Zone 6 열전대 편차</label>' +
+      '<label class="row">' + inp('rootCause.recipeError', 'bool') + ' <b>Setting 오류</b> — 야간조 Changeover 시 구 레시피(Rev.C) 로드</label>' +
+      (rc.eqId ? '' : '<p class="note">이상 설비가 “없음”이면 설비 조건·Setting 오류는 적용되지 않습니다.</p>') + '</div>' +
+      '<div class="card"><h3>영향 계수 (불량률 %p)</h3><div class="form-grid" style="grid-template-columns:repeat(2,minmax(0,1fr))">' +
+      field('정상 불량률', inp('effects.base', 'num', 'step="0.1"')) + field('신규 Lot 단독 영향', inp('effects.lotEffect', 'num', 'step="0.1"')) +
+      field('구 레시피 단독 영향', inp('effects.recipeEffect', 'num', 'step="0.1"')) + field('Lot × 레시피 결합 영향', inp('effects.interaction', 'num', 'step="0.1"')) +
+      field('열전대 편차 영향', inp('effects.tcDrift', 'num', 'step="0.1"')) + field('방치 시 분당 악화', inp('effects.tcDriftRamp', 'num', 'step="0.01"')) +
+      '</div></div></div>' +
+      '<div class="card" style="margin-top:12px"><h3>게임 시작 시점 미리보기 <span class="tag">자동 계산</span></h3>' + preview() + '</div>';
+  };
+
+  VIEWS.kpi = function () {
+    return head('KPI 초기값', '생산·납기·고객 관련 기준값. 불량률/수율은 Root Cause 설정에서 계산됩니다.') +
+      '<div class="card"><div class="form-grid">' +
+      field('생산 기준 Capacity (%)', inp('kpi.baseCapacity', 'num')) + field('설비가동률 기준 (%)', inp('kpi.baseUtil', 'num')) +
+      field('시간당 계획 생산 (ea)', inp('kpi.planPerHour', 'num')) + field('18:00 출하 요구 (ea)', inp('kpi.shipmentTarget', 'num')) +
+      field('09:00 완제품 재고 (ea)', inp('kpi.fgStock', 'num')) + field('납기 예측 보정 (%p)', inp('kpi.deliveryBias', 'num'), '', '+ 이면 여유, − 이면 압박') +
+      field('Customer Risk 초기 노출도', inp('kpi.customerExposure0', 'num', 'step="0.1"'), '', '<1.2 LOW · <2.5 MEDIUM · <4 HIGH') +
+      '</div></div><div class="card" style="margin-top:12px"><h3>미리보기</h3>' + preview() + '</div>';
+  };
+
+  VIEWS.data = function () {
+    var groups = {};
+    FDL.DATA_MODULES.forEach(function (m) { (groups[m.menu] = groups[m.menu] || []).push(m); });
+    return head('교육생에게 공개할 데이터', '숨긴 데이터는 교육생 화면과 AI Analyst 답변에서 모두 제외됩니다.') +
+      '<div class="callout" style="margin-bottom:12px">공급사 PCN, Profiler 실측, 타 라인 정보는 교육생의 조치(공급사 문의·설비 점검)나 Event 발생 후 자동 공개되는 <b>조건부 데이터</b>입니다.</div>' +
+      '<div class="grid c2">' + Object.keys(groups).map(function (g) {
+        return '<div class="card"><h3>' + g + '</h3><table class="data">' + groups[g].map(function (m) {
+          var hidden = cfg.dataVisibility[m.id] === 'hidden';
+          return '<tr><td>' + esc(m.label) + '</td><td style="text-align:right"><span class="seg"><button data-vis="' + m.id + '" data-v="open" class="' + (!hidden ? 'on' : '') + '">공개</button><button data-vis="' + m.id + '" data-v="hidden" class="' + (hidden ? 'on' : '') + '">숨김</button></span></td></tr>';
+        }).join('') + '</table></div>';
+      }).join('') + '</div>';
+  };
+
+  VIEWS.events = function () {
+    var ce = cfg.conditionalEvents;
+    var CE = [['capacityAlert', 'PRODUCTION ALERT — 생산량 85% 미만 시 생산관리팀 연락'], ['stopAllEscalation', '전체 중단 3분 경과 시 공장장 호출'], ['materialStock', '대체 Lot 잔량 부족 경고'], ['customerEscalation', '고객 문의 10분 내 미대응 시 Escalation (+Risk)'], ['inspectionBottleneck', '전수검사 4분 경과 시 검사 병목'], ['qualityCritical', '불량률 8% 초과 시 품질 임계 알림']];
+    return head('Trigger Event', '시간 경과 이벤트와 조건부 이벤트를 설정합니다.') +
+      '<div class="card" style="margin-bottom:12px"><h3>시간 이벤트 (T+분)</h3><div class="table-wrap"><table class="data"><thead><tr><th>사용</th><th>T+분</th><th>유형</th><th>제목</th><th>메시지 (비우면 상황별 자동 문구)</th></tr></thead><tbody>' +
+      cfg.events.map(function (e, i) {
+        return '<tr><td>' + inp('events.' + i + '.enabled', 'bool') + '</td><td style="width:80px">' + inp('events.' + i + '.minute', 'num', 'min="1" style="width:70px"') + '</td><td>' + sel('events.' + i + '.type', ['QUALITY', 'PRODUCTION', 'CUSTOMER', 'MATERIAL', 'INFO']) + '</td><td>' + inp('events.' + i + '.title', 'str', 'style="width:100%"') + '</td>' +
+          '<td><textarea data-path="events.' + i + '.message" data-type="str" style="width:100%;min-height:40px" placeholder="예) 생산관리팀: ...">' + esc(e.message || '') + '</textarea></td></tr>';
+      }).join('') + '</tbody></table></div><p class="note">자동 문구는 교육생의 이전 판단(불량률 개선 여부, 고객 선제 공유 여부 등)에 따라 달라집니다. 직접 입력 시 고정 문구로 표시됩니다.</p></div>' +
+      '<div class="card"><h3>조건부 이벤트 (Consequence 연동)</h3>' + CE.map(function (c) { return '<label class="row" style="margin-bottom:8px">' + inp('conditionalEvents.' + c[0], 'bool') + ' ' + esc(c[1]) + '</label>'; }).join('') + '</div>';
+  };
+
+  VIEWS.conseq = function () {
+    var PL = { rate: '라인 속도 비율', interactionRelief: '결합 영향 완화율', shiftGain: '타 설비 물량 흡수율', stockMin: '대체 Lot 재고 (분)', wipLoss: 'WIP 손실 (%)', productionFactor: '생산 계수', escapeRate: '유출률', durationMin: '소요 시간 (분)', replyMin: '회신 시간 (분)', deliveryPenalty: '납기 페널티', exposureCut: '노출도 감소율', exposureRelief: '노출도 감소', deliveryBonus: '납기 만회 (%)' };
+    return head('의사결정별 Consequence', '각 조치의 효과 계수를 조정합니다. KPI 변화는 모델이 계산합니다.') +
+      '<div class="card"><div class="table-wrap"><table class="data"><thead><tr><th>조치</th><th>설명</th><th>계수</th></tr></thead><tbody>' +
+      FDL.ACTIONS.map(function (a) {
+        var ps = Object.keys(a.params);
+        return '<tr><td><b>' + esc(a.label) + '</b></td><td class="muted" style="font-size:12px">' + esc(a.desc) + '</td><td>' + (ps.length ? ps.map(function (k) {
+          var v = cfg.actionParams[a.id] && cfg.actionParams[a.id][k] != null ? cfg.actionParams[a.id][k] : a.params[k];
+          return '<div class="row" style="margin-bottom:4px"><span class="muted" style="font-size:12px;min-width:120px">' + (PL[k] || k) + '</span><input type="number" step="0.01" style="width:90px" data-ap="' + a.id + '.' + k + '" value="' + v + '"></div>';
+        }).join('') : '<span class="muted">—</span>') + '</td></tr>';
+      }).join('') + '</tbody></table></div></div>';
+  };
+
+  VIEWS.eval = function () {
+    return head('평가기준', '6대 판단 영역 가중치. 결과 화면의 종합 프로필 계산에 반영됩니다.') +
+      '<div class="callout" style="margin-bottom:12px">점수는 순위 경쟁이 아니라 Debrief 대화의 출발점입니다. 각 영역 피드백은 교육생의 실제 행동 로그(탐색 순서, 가설 갱신, 의사결정 근거, Event 대응)를 근거로 생성됩니다.</div>' +
+      '<div class="card"><table class="data"><thead><tr><th>영역</th><th>평가 근거 (행동 로그)</th><th>가중치</th></tr></thead><tbody>' +
+      [['SA', '첫 품질 데이터 확인 시점, Trend/Pareto 확인, Event 후 8분 내 후속 행동'], ['DA', '실제 원인 요인별 데이터 확인, 4M 탐색 폭, 교차 분석, Noise 비중'], ['HQ', '가설 수·근거·상태 갱신, 최종 Root Cause 의 원인 포함/Noise 포함'], ['DM', '첫 결정 시점, 근거의 데이터 인용, 불량률 개선, 유출 차단'], ['TM', '종료 시 품질·생산·납기·고객 균형, 대체 생산계획, 협업·고객 대응'], ['AD', 'Event 후 재판단, 가설 수정, 조치 재평가, 재발방지의 구조적 대책']].map(function (r) {
+        var d = FDL.DOMAINS.filter(function (x) { return x.id === r[0]; })[0];
+        return '<tr><td><b>' + d.label + '</b><div class="muted" style="font-size:12px">' + d.ko + '</div></td><td class="muted" style="font-size:12px">' + r[1] + '</td><td style="width:110px">' + inp('weights.' + r[0], 'num', 'min="0" max="3" step="0.5" style="width:80px"') + '</td></tr>';
+      }).join('') + '</tbody></table></div>';
+  };
+
+  VIEWS.deploy = function () {
+    var link = location.href.replace(/admin\.html.*$/, 'index.html') + '#cfg=' + FDL.encodeCfg(cfg);
+    return head('배포 · 저장', '설정을 교육생 화면에 적용하는 방법') +
+      '<div class="grid c2"><div class="card"><h3>① 같은 PC / 브라우저</h3><p class="muted" style="font-size:13px">“이 브라우저에 저장” 후 같은 브라우저에서 교육생 화면(index.html)을 열면 설정이 적용됩니다. 교육생 결과도 이 브라우저에 자동 저장되어 Debrief 비교가 바로 가능합니다.</p>' +
+      '<div class="row"><button class="btn primary" id="saveBtn2">이 브라우저에 저장</button><button class="btn danger" id="resetBtn">기본값으로 초기화</button></div></div>' +
+      '<div class="card"><h3>② 교육생 배포 링크 (여러 PC)</h3><p class="muted" style="font-size:13px">설정이 URL 에 포함된 링크입니다. 각 교육생 PC 에서 이 링크로 접속하십시오. 결과는 교육생이 “결과 JSON 저장” 후 강사에게 제출합니다.</p>' +
+      '<div class="link-box" id="linkBox">' + esc(link) + '</div><div class="row" style="margin-top:8px"><button class="btn" id="copyLink">링크 복사</button><a class="btn" href="' + esc(link) + '" target="_blank" rel="noopener">링크로 열기 ↗</a></div></div>' +
+      '<div class="card"><h3>③ 설정 파일</h3><p class="muted" style="font-size:13px">Case 설정을 JSON 파일로 보관하고 다음 차수에 재사용합니다.</p><div class="row"><button class="btn" id="expCfg">설정 JSON 내보내기</button><label class="btn">설정 JSON 불러오기<input type="file" id="impCfg" accept=".json" hidden></label></div></div>' +
+      '<div class="card"><h3>현재 설정 요약</h3><table class="data"><tr><td class="muted">Case</td><td>' + esc(cfg.caseName) + '</td></tr><tr><td class="muted">난이도 / 시간</td><td>' + cfg.difficulty + ' / ' + cfg.timeLimitMin + '분 (×' + cfg.speed + ')</td></tr><tr><td class="muted">Root Cause</td><td>' + FDL.activeFactors(cfg).map(function (f) { return FDL.FACTOR_LABEL[f]; }).join(' + ') + (cfg.rootCause.eqId ? ' · ' + cfg.rootCause.eqId : '') + '</td></tr><tr><td class="muted">숨긴 데이터</td><td>' + (Object.keys(cfg.dataVisibility).filter(function (k) { return cfg.dataVisibility[k] === 'hidden'; }).join(', ') || '없음') + '</td></tr></table></div></div>';
+  };
+
+  /* ---------------- Debrief ---------------- */
+  function allResults() {
+    var local = FDL.store.get('fdl.results', []);
+    return local.map(function (r) { r._src = '브라우저'; return r; }).concat(imported.map(function (r) { r._src = '파일'; return r; }));
+  }
+  var TEAM_COLORS = FDL.SERIES;
+
+  VIEWS.debrief = function () {
+    var list = allResults();
+    var chosen = list.filter(function (r) { return selected[r.id]; }).slice(0, 4);
+    var out = head('Debrief — 팀별 Decision Timeline 비교', '순위 경쟁이 아니라 “서로 다른 판단과 그 결과”를 비교하는 화면입니다.') +
+      '<div class="card" style="margin-bottom:12px"><h3>결과 목록 <span class="row"><label class="btn sm">결과 JSON 불러오기 (복수)<input type="file" id="impRes" accept=".json" multiple hidden></label><button class="btn sm danger" id="clearRes">브라우저 결과 삭제</button></span></h3>' +
+      (list.length ? '<div class="table-wrap"><table class="data"><thead><tr><th>비교</th><th>팀</th><th>Case</th><th>종료</th><th class="num">소요</th><th class="num">의사결정</th><th class="num">가설</th><th>출처</th></tr></thead><tbody>' +
+        list.map(function (r) {
+          return '<tr class="result-row"><td><input type="checkbox" data-sel="' + esc(r.id) + '"' + (selected[r.id] ? ' checked' : '') + '></td><td><b>' + esc(r.team) + '</b></td><td class="muted" style="font-size:12px">' + esc(r.caseName) + '</td><td class="mono" style="font-size:12px">' + esc((r.finishedAt || '').replace('T', ' ').slice(0, 16)) + '</td><td class="num">' + r.gameMinutes + '분</td><td class="num">' + r.log.filter(function (l) { return l.type === 'decision'; }).length + '</td><td class="num">' + r.hypotheses.length + '</td><td class="muted">' + r._src + '</td></tr>';
+        }).join('') + '</tbody></table></div><p class="note">최대 4팀까지 선택해 비교합니다. (팀 목록은 종료 시각 순이며 점수 순위를 표시하지 않습니다)</p>'
+        : '<p class="muted">아직 결과가 없습니다. 교육생이 이 브라우저에서 게임을 완료하거나, 제출한 결과 JSON 을 불러오십시오.</p>') + '</div>';
+    if (!chosen.length) return out;
+    var color = function (i) { return TEAM_COLORS[i % TEAM_COLORS.length]; };
+    // 요약 비교
+    out += '<div class="card" style="margin-bottom:12px"><h3>판단 경로 요약</h3><div class="table-wrap"><table class="data"><thead><tr><th>항목</th>' + chosen.map(function (r, i) { return '<th><span class="team-dot" style="background:' + color(i) + '"></span>' + esc(r.team) + '</th>'; }).join('') + '</tr></thead><tbody>' +
+      [['첫 품질 데이터 확인', function (r) { var x = r.log.filter(function (l) { return (l.type === 'view' || l.type === 'query') && /^(quality|strat|cross)/.test(l.key || ''); })[0]; return x ? x.clock : '—'; }],
+        ['첫 가설', function (r) { var h = r.hypotheses[0]; return h ? h.clock + ' ' + esc(h.title) : '—'; }],
+        ['첫 의사결정', function (r) { var d = r.log.filter(function (l) { return l.type === 'decision'; })[0]; return d ? d.clock + ' ' + esc(d.data.actions.map(function (a) { return a.label + (a.target ? '(' + a.target + ')' : ''); }).join(', ')) : '—'; }],
+        ['의사결정 횟수', function (r) { return r.log.filter(function (l) { return l.type === 'decision'; }).length + '회'; }],
+        ['요인별 첫 데이터 확인', function (r) { var ff = (r.score && r.score.factorFirst) || {}; return (r.score.active || []).map(function (f) { return FDL.FACTOR_LABEL[f].split(' (')[0] + ' ' + (ff[f] != null ? clockOf(r, ff[f]) : '✕'); }).join('<br>'); }],
+        ['최종 Root Cause', function (r) { return esc(((r.final && r.final.rootCauseChecks) || []).join(' / ')) || '—'; }],
+        ['종료 불량률 / 생산량', function (r) { var e = r.history[r.history.length - 1]; return e.defect + '% / ' + e.production + '%'; }],
+        ['종료 납기 / 고객 Risk', function (r) { var e = r.history[r.history.length - 1]; return '<span class="lvl ' + e.delivery + '">' + e.delivery + '</span> / <span class="lvl ' + e.customer + '">' + e.customer + '</span>'; }]
+      ].map(function (row) { return '<tr><td class="muted">' + row[0] + '</td>' + chosen.map(function (r) { return '<td style="font-size:13px">' + row[1](r) + '</td>'; }).join('') + '</tr>'; }).join('') + '</tbody></table></div></div>';
+    // 차트
+    var maxLen = Math.max.apply(null, chosen.map(function (r) { return r.history.length; }));
+    var labels = []; for (var i = 0; i < maxLen; i++) labels.push('T+' + i);
+    var pad = function (arr) { var a = arr.slice(); while (a.length < maxLen) a.push(null); return a; };
+    out += '<div class="grid c2" style="margin-bottom:12px"><div class="card"><h3>불량률 궤적 비교</h3>' + FDL.charts.line({ labels: labels, width: 560, height: 230, unit: '%', series: chosen.map(function (r, i) { return { name: r.team, color: color(i), values: pad(r.history.map(function (h) { return h.defect; })) }; }) }) + '</div>' +
+      '<div class="card"><h3>생산량 궤적 비교</h3>' + FDL.charts.line({ labels: labels, width: 560, height: 230, unit: '%', yMin: 0, yMax: 100, series: chosen.map(function (r, i) { return { name: r.team, color: color(i), values: pad(r.history.map(function (h) { return h.production; })) }; }) }) + '</div></div>';
+    out += '<div class="grid c2" style="margin-bottom:12px"><div class="card"><h3>판단 역량 프로필</h3>' + FDL.charts.radar({ axes: FDL.DOMAINS.map(function (d) { return d.ko; }), series: chosen.map(function (r, i) { return { name: r.team, color: color(i), values: FDL.DOMAINS.map(function (d) { return r.score.domains[d.id].score; }) }; }) }) + '</div>' +
+      '<div class="card"><h3>Debrief 진행 가이드</h3><ol class="debrief-q"><li>같은 Alert 을 보고 팀마다 <b>처음 확인한 데이터</b>가 달랐습니다. 왜 그것을 먼저 봤습니까?</li><li>첫 의사결정 시점과 조치가 가장 다른 두 팀을 비교해 보십시오. 각 판단의 근거는 무엇이었습니까?</li><li>생산량 궤적이 크게 갈린 지점은 어디입니까? 그 결정의 Trade-off 를 어떻게 설명하겠습니까?</li><li>복합 원인 중 늦게 발견된 요인은 무엇이고, 무엇이 발견을 늦췄습니까?</li><li>우리 현장의 변경점 관리·교대 인수인계에 적용할 교훈은 무엇입니까?</li></ol></div></div>';
+    out += '<h2 style="font-size:15px;margin:6px 0 10px">Decision Timeline (팀별 나란히)</h2><div class="compare-cols">' + chosen.map(function (r, i) {
+      return '<div class="card"><h3><span><span class="team-dot" style="background:' + color(i) + '"></span>' + esc(r.team) + '</span><span class="tag">' + r.gameMinutes + '분</span></h3><div class="timeline">' + FDL.timelineHtml(r.log, false) + '</div></div>';
+    }).join('') + '</div>';
+    return out;
+  };
+  function clockOf(r, t) {
+    var x = r.history.filter(function (h) { return h.t === t; })[0];
+    if (x) return x.clock;
+    var m = 9 * 60 + t; return String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0');
+  }
+
+  /* ---------------- render / bind ---------------- */
+  function render() {
+    renderNav();
+    $('#adminView').innerHTML = VIEWS[tab]();
+    bind();
+  }
+
+  function bind() {
+    $$('#adminView [data-path]').forEach(function (el) {
+      el.onchange = function () {
+        var t = el.getAttribute('data-type'), v;
+        if (t === 'bool') v = el.checked;
+        else if (t === 'num') v = el.value === '' ? 0 : Number(el.value);
+        else v = el.value;
+        var path = el.getAttribute('data-path');
+        if (path === 'rootCause.eqId' && v === '') v = null;
+        set(path, v);
+        cfg.caseId = /^(rootCause|effects)/.test(path) ? 'custom' : cfg.caseId;
+        setDirty(true);
+        if (tab === 'root' || tab === 'kpi') render();
+      };
+    });
+    $$('#adminView [data-preset]').forEach(function (b) {
+      b.onclick = function () {
+        var k = b.getAttribute('data-preset'), p = FDL.CASE_PRESETS[k];
+        cfg.caseId = k; cfg.caseName = p.caseName;
+        cfg.rootCause = FDL.clone(p.rootCause); cfg.effects = FDL.clone(p.effects);
+        setDirty(true); render();
+      };
+    });
+    $$('#adminView [data-vis]').forEach(function (b) {
+      b.onclick = function () {
+        var id = b.getAttribute('data-vis');
+        if (b.getAttribute('data-v') === 'hidden') cfg.dataVisibility[id] = 'hidden'; else delete cfg.dataVisibility[id];
+        setDirty(true); render();
+      };
+    });
+    $$('#adminView [data-ap]').forEach(function (el) {
+      el.onchange = function () {
+        var p = el.getAttribute('data-ap').split('.');
+        cfg.actionParams[p[0]] = cfg.actionParams[p[0]] || {};
+        cfg.actionParams[p[0]][p[1]] = Number(el.value);
+        setDirty(true);
+      };
+    });
+    var ad = $('#applyDiff');
+    if (ad) ad.onclick = function () { cfg.timeLimitMin = FDL.DIFFICULTY[cfg.difficulty].timeLimitMin; setDirty(true); render(); };
+    var s2 = $('#saveBtn2'); if (s2) s2.onclick = save;
+    var rb = $('#resetBtn');
+    if (rb) rb.onclick = function () { FDL.confirmBox('모든 설정을 기본값으로 초기화하시겠습니까?', function () { cfg = FDL.clone(FDL.DEFAULT_CONFIG); try { localStorage.removeItem('fdl.config'); } catch (e) {} saved = null; setDirty(false); render(); }, '초기화'); };
+    var cl = $('#copyLink');
+    if (cl) cl.onclick = function () {
+      var txt = $('#linkBox').textContent;
+      FDL.copyText(txt, function (ok) {
+        if (ok) { flash('링크를 복사했습니다.'); return; }
+        var r = document.createRange(); r.selectNodeContents($('#linkBox'));
+        var sl = window.getSelection(); sl.removeAllRanges(); sl.addRange(r);
+        flash('링크를 선택했습니다. Ctrl+C 로 복사하십시오.');
+      });
+    };
+    var ec = $('#expCfg');
+    if (ec) ec.onclick = function () { FDL.saveJson(cfg, 'FDL_config_' + (cfg.caseId || 'custom') + '.json'); };
+    var ic = $('#impCfg');
+    if (ic) ic.onchange = function () {
+      readFiles(ic.files, function (objs) {
+        if (!objs[0] || !objs[0].rootCause) { FDL.alertBox('올바른 설정 파일이 아닙니다.'); return; }
+        cfg = FDL.deepMerge(FDL.clone(FDL.DEFAULT_CONFIG), objs[0]); setDirty(true); render(); flash('설정을 불러왔습니다. 저장을 눌러 적용하십시오.');
+      });
+    };
+    var ir = $('#impRes');
+    if (ir) ir.onchange = function () {
+      readFiles(ir.files, function (objs) {
+        var n = 0;
+        objs.forEach(function (o) { if (o && o.app === 'factory-decision-lab') { o.id = o.id || ('f' + Date.now() + Math.random()); imported.push(o); selected[o.id] = true; n++; } });
+        flash(n + '개 결과를 불러왔습니다.'); render();
+      });
+    };
+    var cr = $('#clearRes');
+    if (cr) cr.onclick = function () { FDL.confirmBox('이 브라우저에 저장된 교육생 결과를 모두 삭제하시겠습니까?', function () { FDL.store.set('fdl.results', []); render(); }, '삭제'); };
+    $$('#adminView [data-sel]').forEach(function (cb) {
+      cb.onchange = function () {
+        var id = cb.getAttribute('data-sel');
+        if (cb.checked && Object.keys(selected).filter(function (k) { return selected[k]; }).length >= 4) { cb.checked = false; flash('최대 4팀까지 비교할 수 있습니다.'); return; }
+        selected[id] = cb.checked; render();
+      };
+    });
+  }
+
+  function readFiles(files, cb) {
+    var arr = Array.prototype.slice.call(files || []), out = [], left = arr.length;
+    if (!left) return;
+    arr.forEach(function (f) {
+      var r = new FileReader();
+      r.onload = function () { try { out.push(JSON.parse(r.result)); } catch (e) { FDL.alertBox(f.name + ': JSON 파일을 읽을 수 없습니다.'); } if (--left === 0) cb(out); };
+      r.readAsText(f);
+    });
+  }
+  function flash(msg) {
+    var t = document.createElement('div'); t.className = 'toast'; t.textContent = msg; t.style.bottom = '24px';
+    document.body.appendChild(t); setTimeout(function () { t.remove(); }, 2200);
+  }
+  function save() {
+    if (FDL.store.set('fdl.config', cfg)) { saved = FDL.clone(cfg); setDirty(false); flash('저장했습니다. 이 브라우저의 교육생 화면에 적용됩니다.'); }
+    else flash('저장 실패 — 브라우저 저장소를 사용할 수 없습니다. 배포 링크를 사용하십시오.');
+  }
+
+  document.addEventListener('DOMContentLoaded', function () {
+    FDL.charts.initTooltip();
+    $('#saveBtn').onclick = save;
+    var hasResults = FDL.store.get('fdl.results', []).length;
+    if (location.hash === '#debrief' || (hasResults && !saved)) tab = location.hash === '#debrief' ? 'debrief' : tab;
+    setDirty(false);
+    render();
+    window.addEventListener('beforeunload', function (e) { if (dirty) { e.preventDefault(); e.returnValue = ''; } });
+  });
+})();
+
+</script>
+</body>
+</html>

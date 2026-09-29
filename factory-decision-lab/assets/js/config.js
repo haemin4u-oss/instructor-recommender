@@ -215,3 +215,62 @@ FDL.escape = function (s) {
     return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
   });
 };
+
+/* ---------- 브라우저 대화상자 대체 (임베드 환경에서도 동작) ---------- */
+FDL.dialog = function (o) {
+  var bg = document.createElement('div');
+  bg.className = 'modal-bg';
+  bg.style.zIndex = 130;
+  bg.innerHTML = '<div class="modal" role="dialog" aria-modal="true"><div class="m-head"><h3>' + FDL.escape(o.title || '확인') + '</h3></div>' +
+    '<div class="m-body">' + (o.html || '<p style="margin:0;white-space:pre-wrap">' + FDL.escape(o.message || '') + '</p>') + '</div>' +
+    '<div class="m-foot">' + (o.cancel === false ? '' : '<button class="btn" data-no>' + FDL.escape(o.cancel || '취소') + '</button>') +
+    '<button class="btn primary" data-yes>' + FDL.escape(o.ok || '확인') + '</button></div></div>';
+  document.body.appendChild(bg);
+  var close = function () { bg.remove(); };
+  var no = bg.querySelector('[data-no]');
+  if (no) no.onclick = function () { close(); if (o.onNo) o.onNo(); };
+  bg.querySelector('[data-yes]').onclick = function () { close(); if (o.onYes) o.onYes(); };
+  bg.querySelector('[data-yes]').focus();
+  if (o.onOpen) o.onOpen(bg, close);
+  return close;
+};
+FDL.confirmBox = function (message, onYes, ok) { return FDL.dialog({ message: message, onYes: onYes, ok: ok }); };
+FDL.alertBox = function (message) { return FDL.dialog({ title: '알림', message: message, cancel: false }); };
+
+FDL.copyText = function (text, done) {
+  var ok = function () { if (done) done(true); };
+  var fail = function () { if (done) done(false); };
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(ok, fail);
+    else fail();
+  } catch (e) { fail(); }
+};
+
+/* JSON 파일 저장. 다운로드가 막힌 환경(임베드 뷰어)에서는 복사용 창을 띄움 */
+FDL.saveJson = function (obj, name) {
+  var text = JSON.stringify(obj, null, 1);
+  if (!window.FDL_EMBED) {
+    try {
+      var a = document.createElement('a');
+      a.href = URL.createObjectURL(new Blob([text], { type: 'application/json' }));
+      a.download = name; document.body.appendChild(a); a.click();
+      setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 500);
+      return;
+    } catch (e) { /* fall through */ }
+  }
+  FDL.dialog({
+    title: 'JSON 복사 — ' + name, ok: '복사', cancel: '닫기',
+    html: '<p class="muted" style="margin:0;font-size:13px">이 환경에서는 파일 다운로드가 제한됩니다. 아래 내용을 복사해 메모장에 붙여 넣고 <b>' + FDL.escape(name) + '</b> 로 저장하십시오.</p>' +
+      '<textarea id="fdlJsonOut" readonly style="width:100%;min-height:220px;font-family:var(--mono);font-size:11px">' + FDL.escape(text) + '</textarea>',
+    onYes: function () {},
+    onOpen: function (bg) {
+      var ta = bg.querySelector('#fdlJsonOut'), yes = bg.querySelector('[data-yes]');
+      yes.onclick = function () {
+        FDL.copyText(text, function (okd) {
+          if (!okd) { ta.focus(); ta.select(); }
+          yes.textContent = okd ? '복사됨 ✓' : '전체 선택됨 — Ctrl+C';
+        });
+      };
+    }
+  });
+};
