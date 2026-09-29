@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Factory Decision Lab</title>
+  <link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body>
+  <div id="app" class="shell hidden">
+    <header class="topbar">
+      <div class="brand"><span class="logo">▣</span>FACTORY DECISION LAB</div>
+      <div class="case-name" id="caseName"></div>
+      <div class="clockbox">
+        <div class="clock-item"><div class="lbl">Line Clock</div><div class="val" id="gameClock">09:00</div></div>
+        <div class="clock-item remaining" id="remainBox"><div class="lbl">Remaining Time</div><div class="val" id="remain">45:00</div></div>
+      </div>
+      <button class="btn sm ghost" id="pauseBtn" title="강사용 일시정지">⏸ 일시정지</button>
+      <button class="btn sm warn" id="finalBtn">FINAL DECISION</button>
+    </header>
+
+    <section class="kpibar" id="kpibar" aria-label="KPI"></section>
+
+    <div class="main">
+      <nav class="sidenav" id="sidenav" aria-label="데이터 메뉴"></nav>
+      <main class="content" id="view"></main>
+      <aside class="rightpanel" id="rightpanel">
+        <div class="rp-tabs">
+          <button class="active" data-tab="analyst">AI Analyst</button>
+          <button data-tab="hyp">Hypothesis Board <span class="cnt" id="hypCnt">0</span></button>
+          <button class="btn sm ghost panel-close panel-toggle" id="panelClose" aria-label="닫기">✕</button>
+        </div>
+        <div class="rp-body" id="rpAnalyst">
+          <div class="chat" id="chat"></div>
+          <div class="chat-input">
+            <div class="chips" id="askChips"></div>
+            <form id="askForm" autocomplete="off">
+              <input type="text" id="askInput" placeholder="데이터 분석을 요청하세요 (예: 설비별 불량률 비교해줘)">
+              <button class="btn primary" type="submit">전송</button>
+            </form>
+          </div>
+        </div>
+        <div class="rp-body hidden" id="rpHyp">
+          <div class="hyp-wrap" id="hypList"></div>
+          <div class="chat-input"><button class="btn primary" id="addHypBtn">+ 가설 추가</button></div>
+        </div>
+      </aside>
+    </div>
+
+    <footer class="bottombar">
+      <div class="ticker" id="ticker"><span class="t-time">--:--</span><span class="t-msg">대기 중</span></div>
+      <button class="btn sm panel-toggle" id="panelOpen">AI · 가설</button>
+      <button class="decision-btn" id="decisionBtn">DECISION</button>
+    </footer>
+  </div>
+
+  <div class="drawer" id="drawer" aria-hidden="true">
+    <div class="d-head"><h3 id="drawerTitle"></h3><button class="btn sm ghost" id="drawerClose">✕</button></div>
+    <div class="d-body" id="drawerBody"></div>
+  </div>
+
+  <div id="modals"></div>
+  <div id="fullpage" class="fullpage"></div>
+
+  <script src="assets/js/config.js"></script>
+  <script src="assets/js/model.js"></script>
+  <script src="assets/js/charts.js"></script>
+  <script src="assets/js/analyst.js"></script>
+  <script src="assets/js/scoring.js"></script>
+  <script src="assets/js/game.js"></script>
+</body>
+</html>
